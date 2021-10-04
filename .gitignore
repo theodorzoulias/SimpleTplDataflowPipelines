@@ -339,6 +339,8 @@ ASALocalRun/
 # BeatPulse healthcheck temp database
 healthchecksdb
 
+_Notes.txt
 _Graveyard.txt
 .editorconfig
 _VARIOUS/
+SimpleTplDataflowPipelines.Local.sln
