@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -139,25 +140,6 @@ namespace SimpleTplDataflowPipelines
 
     internal static class PipelineCommon
     {
-        internal static Task CreatePipeline<TInput>(ITargetBlock<TInput> target,
-            LinkDelegate[] linkDelegates)
-        {
-            Debug.Assert(target != null);
-            var completions = new List<Task>();
-            var links = new List<Task>();
-            completions.Add(target.Completion); // The initial builder has null linkDelegates
-            if (linkDelegates != null)
-                foreach (var action in linkDelegates)
-                    action(completions, links);
-            var allCompletions = Task.WhenAll(completions);
-            var allLinks = Task.WhenAll(links);
-
-            // In the (extremely unlikely) scenario that any of the links fails, there is
-            // no guarantee that the completions will complete. So in this case the failed
-            // link task is propagated immediately, and the completions are fire-and-forgotten.
-            return PipelineUtilities.WhenBothOrFirstFails(allLinks, allCompletions);
-        }
-
         internal static void LinkTo<TOutput>(
             ISourceBlock<TOutput> source, ITargetBlock<TOutput> target,
             List<Task> completions, List<Task> links)
@@ -176,6 +158,7 @@ namespace SimpleTplDataflowPipelines
             {
                 // The completion of the source is propagated to the target without a check,
                 // because this is the normal case.
+                //throw new InvalidOperationException(); // @@
                 target.Complete();
             }, TaskScheduler.Default);
 
@@ -191,6 +174,37 @@ namespace SimpleTplDataflowPipelines
             completions.Add(target.Completion);
             links.Add(forwardLink);
             links.Add(backwardLink);
+        }
+
+        internal static Task CreatePipeline<TInput>(ITargetBlock<TInput> target,
+            LinkDelegate[] linkDelegates)
+        {
+            Debug.Assert(target != null);
+            var completions = new List<Task>();
+            var links = new List<Task>();
+            completions.Add(target.Completion); // The initial builder has null linkDelegates
+            if (linkDelegates != null)
+                foreach (var action in linkDelegates)
+                    action(completions, links);
+
+            // In the (extremely unlikely) scenario that any of the links fails, there is
+            // no guarantee that the Completion's of all blocks will actually complete.
+            // Propagating a link-error through the pipeline's Completion is not sufficient,
+            // because the caller may consume the pipeline without observing directly the
+            // Completion property (they may use the Receive method for example).
+            // In that case the caller will most likely deadlock.
+
+            // This leaves only one realistic option:
+            // Rethrow the link-error on the ThreadPool, resulting in an application-crashing
+            // unhandled exception. This sounds nasty, but we are talking about methods that
+            // according to the documentation should never throw. So if they throw, the
+            // current state of the process is most likely in deep trouble already.
+            if (links.Count > 0)
+            {
+                var allLinks = PipelineUtilities.WhenAllFailFast(links);
+                ThreadPool.QueueUserWorkItem(async _ => await allLinks);
+            }
+            return Task.WhenAll(completions);
         }
     }
 
@@ -275,16 +289,26 @@ namespace SimpleTplDataflowPipelines
             return (array ?? Enumerable.Empty<T>()).Append(item).ToArray();
         }
 
-        internal static Task WhenBothOrFirstFails(Task first, Task second)
+        // https://stackoverflow.com/questions/57313252/how-can-i-await-an-array-of-tasks-and-stop-waiting-on-first-exception
+        internal static Task WhenAllFailFast(IList<Task> tasks)
         {
-            Debug.Assert(first != null);
-            Debug.Assert(second != null);
-            return Task.WhenAny(first, second).ContinueWith(t =>
+            Debug.Assert(tasks != null);
+            var cts = new CancellationTokenSource();
+            Task failedTask = null;
+            var continuationAction = new Action<Task>(task =>
             {
-                Task completed = t.Result;
-                if (completed == first && first.Status != TaskStatus.RanToCompletion)
-                    return first;
-                return Task.WhenAll(first, second);
+                if (task.Status != TaskStatus.RanToCompletion)
+                    if (Interlocked.CompareExchange(ref failedTask, task, null) == null)
+                        cts.Cancel();
+            });
+            var continuations = tasks.Select(task => task.ContinueWith(continuationAction,
+                cts.Token, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default));
+
+            return Task.WhenAll(continuations).ContinueWith(_ =>
+            {
+                cts.Dispose();
+                if (failedTask != null) return failedTask;
+                return Task.WhenAll(tasks);
             }, TaskScheduler.Default).Unwrap();
         }
     }
