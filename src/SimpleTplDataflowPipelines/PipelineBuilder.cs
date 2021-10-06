@@ -174,7 +174,7 @@ namespace SimpleTplDataflowPipelines
 
             // Propagating the completion of the blocks follows the same pattern implemented
             // internally by the TPL Dataflow library. The ContinueWith method is used for
-            // creating fire-and-forget continuations, with any error thown inside the
+            // creating fire-and-forget continuations, with any error thrown inside the
             // continuations propagated to the ThreadPool.
             // https://source.dot.net/System.Threading.Tasks.Dataflow/Internal/Common.cs.html#7160be0ba468d387
             // It's extremely unlikely that any of these continuations will ever fail since,
