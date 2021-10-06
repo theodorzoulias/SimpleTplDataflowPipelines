@@ -154,6 +154,7 @@ namespace SimpleTplDataflowPipelines
             // that is unlikely to be useful to anyone.
             _ = source.LinkTo(target);
 
+            // https://github.com/dotnet/runtime/blob/8486eacfa31af0e28e8b819e7b36a32cf755a94f/src/libraries/System.Threading.Tasks.Dataflow/src/Internal/Common.cs#L558
             Task forwardLink = source.Completion.ContinueWith(t =>
             {
                 // The completion of the source is propagated to the target without a check,
