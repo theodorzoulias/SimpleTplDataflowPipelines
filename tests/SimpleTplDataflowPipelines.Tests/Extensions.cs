@@ -40,5 +40,11 @@ namespace SimpleTplDataflowPipelines.Tests
                 }, default, TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default).Unwrap();
         }
+
+        // Missing from .NET Framework
+        public static bool IsCompletedSuccessfully(this Task task)
+        {
+            return task.Status == TaskStatus.RanToCompletion;
+        }
     }
 }

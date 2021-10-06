@@ -102,10 +102,10 @@ namespace SimpleTplDataflowPipelines.Tests
         public async Task BoundedCapacityNoDeadlock()
         {
             // https://stackoverflow.com/questions/21603428/tpl-dataflow-exception-in-transform-block-with-bounded-capacity
-            var block1 = new BufferBlock<int>(new() { BoundedCapacity = 1 });
+            var block1 = new BufferBlock<int>(new DataflowBlockOptions() { BoundedCapacity = 1 });
 
             var block2 = new ActionBlock<int>(x => throw new ApplicationException(),
-                new() { BoundedCapacity = 2, MaxDegreeOfParallelism = 2 });
+                new ExecutionDataflowBlockOptions() { BoundedCapacity = 2, MaxDegreeOfParallelism = 2 });
 
             var pipeline = PipelineBuilder
                 .BeginWith(block1)
@@ -127,7 +127,7 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Count == 2, aex.InnerExceptions.Count.ToString());
             Assert.IsTrue(aex.InnerExceptions.All(ex => ex is ApplicationException));
             Assert.IsTrue(block1.Count == 0);
-            Assert.IsTrue(block1.Completion.IsCompletedSuccessfully);
+            Assert.IsTrue(block1.Completion.IsCompletedSuccessfully());
             Assert.IsTrue(block2.Completion.IsFaulted);
         }
 
@@ -135,11 +135,11 @@ namespace SimpleTplDataflowPipelines.Tests
         public async Task DiscardOutputOfVeryLongPipeline()
         {
             var blocks = Enumerable.Range(1, 100)
-                .Select(_ => new TransformBlock<int, int>(x => x, new() { BoundedCapacity = 1 }))
+                .Select(_ => new TransformBlock<int, int>(x => x, new ExecutionDataflowBlockOptions() { BoundedCapacity = 1 }))
                 .ToArray();
 
             var finalBlock = new ActionBlock<int>(x => throw new ApplicationException(),
-                new() { BoundedCapacity = 1 });
+                new ExecutionDataflowBlockOptions() { BoundedCapacity = 1 });
 
             var builder = PipelineBuilder.BeginWith(blocks[0]);
             foreach (var block in blocks.Skip(1)) builder = builder.LinkTo(block);
@@ -160,7 +160,7 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Count == 1, aex.InnerExceptions.Count.ToString());
             Assert.IsTrue(aex.InnerException is ApplicationException);
             Assert.IsTrue(blocks.All(block => block.OutputCount == 0));
-            Assert.IsTrue(blocks.All(block => block.Completion.IsCompletedSuccessfully));
+            Assert.IsTrue(blocks.All(block => block.Completion.IsCompletedSuccessfully()));
             Assert.IsTrue(finalBlock.Completion.IsFaulted);
         }
 
@@ -173,7 +173,7 @@ namespace SimpleTplDataflowPipelines.Tests
                 async x => { if (x >= 3) { await Task.Delay(50); throw new ApplicationException(x.ToString()); } return x; });
             var block3 = new ActionBlock<int>(
                 async x => { await Task.Delay(100); throw new ApplicationException(x.ToString()); },
-                new() { MaxDegreeOfParallelism = 2 });
+                new ExecutionDataflowBlockOptions() { MaxDegreeOfParallelism = 2 });
 
             var pipeline = PipelineBuilder
                 .BeginWith(block1)
@@ -275,7 +275,7 @@ namespace SimpleTplDataflowPipelines.Tests
 
             int count = 0;
             var finalBlock = new ActionBlock<int>(x => count++,
-                new() { BoundedCapacity = 1 });
+                new ExecutionDataflowBlockOptions() { BoundedCapacity = 1 });
 
             var builder = PipelineBuilder.BeginWith(blocks[0]);
             foreach (var block in blocks.Skip(1)) builder = builder.LinkTo(block);
