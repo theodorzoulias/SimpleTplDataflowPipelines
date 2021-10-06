@@ -97,9 +97,9 @@ namespace SimpleTplDataflowPipelines
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
             var source = _source;
-            var action = new LinkDelegate(completions
-                => PipelineCommon.LinkTo(source, block, completions));
-            var newActions = PipelineUtilities.Append(_linkDelegates, action);
+            var action = new LinkDelegate(
+                completions => PipelineCommon.LinkTo(source, block, completions));
+            var newActions = PipelineCommon.Append(_linkDelegates, action);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, newActions);
         }
 
@@ -112,9 +112,9 @@ namespace SimpleTplDataflowPipelines
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
             var source = _source;
-            var action = new LinkDelegate(completions
-                => PipelineCommon.LinkTo(source, block, completions));
-            var newActions = PipelineUtilities.Append(_linkDelegates, action);
+            var action = new LinkDelegate(
+                completions => PipelineCommon.LinkTo(source, block, completions));
+            var newActions = PipelineCommon.Append(_linkDelegates, action);
             return new PipelineBuilder<TInput>(_target, newActions);
         }
 
@@ -176,6 +176,7 @@ namespace SimpleTplDataflowPipelines
             // internally by the TPL Dataflow library. The ContinueWith method is used for
             // creating fire-and-forget continuations, with any error thown inside the
             // continuations propagated to the ThreadPool.
+            // https://source.dot.net/System.Threading.Tasks.Dataflow/Internal/Common.cs.html#7160be0ba468d387
             // It's extremely unlikely that any of these continuations will ever fail since,
             // according to the documentation, the invoked APIs do not throw exceptions.
 
@@ -206,6 +207,22 @@ namespace SimpleTplDataflowPipelines
                 ExceptionDispatchInfo edi = ExceptionDispatchInfo.Capture(error);
                 ThreadPool.QueueUserWorkItem(state => { ((ExceptionDispatchInfo)state).Throw(); }, edi);
             }
+        }
+
+        internal static T[] Append<T>(T[] array, T item)
+        {
+            T[] newArray;
+            if (array == null || array.Length == 0)
+            {
+                newArray = new T[1];
+            }
+            else
+            {
+                newArray = new T[array.Length + 1];
+                Array.Copy(array, newArray, array.Length);
+            }
+            newArray[newArray.Length - 1] = item;
+            return newArray;
         }
     }
 
@@ -280,25 +297,6 @@ namespace SimpleTplDataflowPipelines
                 return receivable.TryReceiveAll(out items);
             items = null;
             return false;
-        }
-    }
-
-    internal static class PipelineUtilities
-    {
-        internal static T[] Append<T>(T[] array, T item)
-        {
-            T[] newArray;
-            if (array == null || array.Length == 0)
-            {
-                newArray = new T[1];
-            }
-            else
-            {
-                newArray = new T[array.Length + 1];
-                Array.Copy(array, newArray, array.Length);
-            }
-            newArray[newArray.Length - 1] = item;
-            return newArray;
         }
     }
 }
