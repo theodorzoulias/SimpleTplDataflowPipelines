@@ -165,11 +165,11 @@ namespace SimpleTplDataflowPipelines
             Debug.Assert(completions != null);
             completions.Add(target.Completion);
 
-            // Storing the IDisposable returned by the LinkTo, and and disposing it after
+            // Storing the IDisposable returned by the LinkTo, and disposing it after
             // the completion of the block, serves no purpose. All links are released
             // automatically anyway when a block completes.
             // Also allowing the dismantling of the pipeline before its completion, is a
-            // functionality that is not likely to be useful in any scenario.
+            // functionality that is not likely to be useful in many scenarios.
             _ = source.LinkTo(target);
 
             // Propagating the completion of the blocks follows the same pattern implemented
