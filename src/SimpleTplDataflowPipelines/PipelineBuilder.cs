@@ -228,7 +228,7 @@ namespace SimpleTplDataflowPipelines
                 }), default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
             }
 
-            failureActions.Add(() =>
+            Action failureAction = () =>
             {
                 if (target.Completion.IsCompleted) return;
                 target.Complete();
@@ -239,7 +239,8 @@ namespace SimpleTplDataflowPipelines
                     _ = targetAsSource.LinkTo(
                         DataflowBlock.NullTarget<TOutput2>(), _nullTargetLinkOptions);
                 }
-            });
+            };
+            lock (failureActions) failureActions.Add(failureAction);
 
             // The onError delegate must not be invoked before all failureActions have been
             // added in the list, hence the need to return an Action here, instead

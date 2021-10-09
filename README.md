@@ -55,6 +55,18 @@ The pipeline represents them as a whole. The pipeline is a [`ITargetBlock<T>`](h
 receive messages, and potentially also a [`ISourceBlock<T>`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.isourceblock-1) that can emit messages.
 Whether it can emit messages depends on the type of the last block added in the pipeline.
 
+## How it works in details
+
+When the pipeline is created, all blocks are linked with the built-in [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method,
+configured with the [`PropagateCompletion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowlinkoptions.propagatecompletion) option set to `false`.
+Then a continuation is attached to the completion of each block, that takes an appropriate
+action depending on how the block completed. If the block was completed successfully or
+it was canceled, the completion is propagated to the next block by invoking the next block's
+[`Complete`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.idataflowblock.complete) method.
+If the block completed in a faulted state, then immediately all the other blocks are
+forcefully completed, and their output is discarded by linking them to a
+[`NullTarget`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.nulltarget) block.
+
 ## Discussion
 
 It might be helpful to compare the functionality offered by this library with the
