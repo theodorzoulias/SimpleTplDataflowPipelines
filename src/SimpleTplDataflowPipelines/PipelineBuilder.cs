@@ -205,7 +205,7 @@ namespace SimpleTplDataflowPipelines
                 tcs.SetException(
                     t.Exception.InnerExceptions.Where(ex => !(ex is PipelineException)));
                 return tcs.Task;
-            }).Unwrap();
+            }, default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default).Unwrap();
         }
 
         internal static LinkDelegate CreateLinkDelegate<TOutput>(IDataflowBlock block,
