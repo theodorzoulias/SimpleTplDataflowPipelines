@@ -5,7 +5,7 @@
 This library helps at building simple [TPL Dataflow](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/dataflow-task-parallel-library) pipelines,
 that enforce the following guarantees:
 
-1. In case any constituent dataflow block fails, all the other blocks will complete
+1. In case any dataflow block fails, all the other blocks will complete
 as soon as possible.
 2. When a pipeline as a whole completes either successfully or with an error, all of its
 constituent dataflow blocks will be also completed.
