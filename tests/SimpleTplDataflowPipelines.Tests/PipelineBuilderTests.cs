@@ -196,7 +196,7 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Select(ex => ex.Message).OrderBy(x => x).SequenceEqual(new[] { "1", "2", "3", "4" }));
             Assert.IsTrue(block4.Completion.IsFaulted);
             Assert.IsTrue(block4.Completion.Exception.InnerExceptions.Count == 1);
-            Assert.IsTrue(block4.Completion.Exception.InnerException.GetType().Name == "PipelineException");
+            Assert.IsTrue(block4.Completion.Exception.InnerException is PipelineException);
         }
 
         [TestMethod]

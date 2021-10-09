@@ -37,7 +37,10 @@ namespace SimpleTplDataflowPipelines
     internal delegate Action LinkDelegate(
         List<Task> completions, List<Action> failureActions, Action onError);
 
-    internal class PipelineException : Exception
+    /// <summary>
+    /// Represents an error that occurred in another dataflow block, owned by the same pipeline.
+    /// </summary>
+    public class PipelineException : Exception
     {
         internal PipelineException() : base("Another block owned by the same pipeline failed.") { }
     }
@@ -76,6 +79,8 @@ namespace SimpleTplDataflowPipelines
         public ITargetBlock<TInput> ToPipeline()
         {
             if (_target == null) throw new InvalidOperationException();
+            Debug.Assert(_lastBlock != null);
+            // Add a dummy final link so that there is one link for each block
             var action = PipelineCommon.CreateLinkDelegate<object>(_lastBlock, null, null);
             var newActions = PipelineCommon.Append(_linkDelegates, action);
             var completion = PipelineCommon.CreatePipeline(_target, newActions);
@@ -147,6 +152,7 @@ namespace SimpleTplDataflowPipelines
         {
             if (_target == null) throw new InvalidOperationException();
             Debug.Assert(_source != null);
+            // Add a dummy final link so that there is one link for each block
             var action = PipelineCommon.CreateLinkDelegate(_source, _source, null);
             var newActions = PipelineCommon.Append(_linkDelegates, action);
             var completion = PipelineCommon.CreatePipeline(_target, newActions);
@@ -156,9 +162,6 @@ namespace SimpleTplDataflowPipelines
 
     internal static class PipelineCommon
     {
-        //private static readonly PipelineException _pipelineExceptionInstance
-        //    = new PipelineException();
-
         private static readonly DataflowLinkOptions _nullTargetLinkOptions
             = new DataflowLinkOptions() { Append = false };
 
@@ -218,14 +221,11 @@ namespace SimpleTplDataflowPipelines
         {
             Debug.Assert(block != null);
             Debug.Assert(!(target != null && blockAsSource == null));
-            //if (target != null) Debug.Assert(blockAsSource != null);
-            //Debug.Assert((blockAsSource == null) == (target == null));
             Debug.Assert(completions != null);
             Debug.Assert(onError != null);
             Debug.Assert(failureActions != null);
 
             completions.Add(block.Completion);
-            //ISourceBlock<TOutput> source = block as ISourceBlock<TOutput>;
 
             Action failureAction = () =>
             {

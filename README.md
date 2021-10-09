@@ -5,16 +5,37 @@
 This library helps at building simple [TPL Dataflow](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/dataflow-task-parallel-library) pipelines,
 that enforce the following guarantees:
 
-1. In case any constituent block fails, all other blocks should complete as soon as possible.
-Under no circumstances a single failed block should result in a deadlocked pipeline.
+1. In case any constituent block fails, all other blocks will complete as soon as possible.
 2. When a pipeline as a whole completes either successfully or with an error, all of its
-constituent blocks are also completed. No active fire-and-forget blocks are left behind.
+constituent blocks will be also completed.
 3. The [`Completion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.idataflowblock.completion)
 of the pipeline propagates all errors that may have occurred in all blocks,
 accumulated inside a flat [`AggregateException`](https://docs.microsoft.com/en-us/dotnet/api/system.aggregateexception).
 
-This StackOverflow question provides a deeper insight about the problem that this library
-attempts to solve: [TPL Dataflow exception in transform block with bounded capacity](https://stackoverflow.com/questions/21603428/tpl-dataflow-exception-in-transform-block-with-bounded-capacity).
+## Why is it needed?
+
+[This](https://stackoverflow.com/questions/21603428/tpl-dataflow-exception-in-transform-block-with-bounded-capacity "TPL Dataflow exception in transform block with bounded capacity") StackOverflow question
+provides a deeper insight about why this library exists.
+The problem with building pipelines using the traditional [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method,
+configured with the [`PropagateCompletion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowlinkoptions.propagatecompletion) option,
+is that it allows the possibility of deadlocks and leaked
+active fire-and-forget blocks:
+
+1. A deadlock can occur in case a producer is blocked, waiting
+for empty space in the input buffer of the first block of a bounded pipeline, and any other
+block except from the first one fails. In this case the producer will never be unblocked,
+because the first block will postpone all incoming messages ad infinitum, never accepting
+or declining any offered message.
+
+2. A leaked fire-and-forget block can occur under similar
+circumstances. When any but the first block fails, the error will be propagated
+downstream but not upstream. So the pipeline will soon signal its completion, while
+some blocks near the top may still be in a running state. These blocks will be leaked as
+fire-and-forget blocks, consuming resources and potentialy modifying the state of the
+application in unpredictable ways. Or they can just get stuck and become the source of a
+deadlock, as described previously.
+
+This library attempts to fix these problems.
 
 ## How to make a pipeline
 
@@ -57,15 +78,21 @@ Whether it can emit messages depends on the type of the last block added in the 
 
 ## How it works in details
 
-When the pipeline is created, all blocks are linked with the built-in [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method,
+When the pipeline is created, all the blocks are linked automatically with the built-in [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method,
 configured with the [`PropagateCompletion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowlinkoptions.propagatecompletion) option set to `false`.
 Then a continuation is attached to the completion of each block, that takes an appropriate
-action depending on how the block completed. If the block was completed successfully or
+action depending on how the block was completed. If the block was completed successfully or
 it was canceled, the completion is propagated to the next block by invoking the next block's
 [`Complete`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.idataflowblock.complete) method.
-If the block completed in a faulted state, then immediately all the other blocks are
-forcefully completed, and their output is discarded by linking them to a
+If the block was completed in a faulted state, then immediately all the other blocks are
+forcefully completed (faulted), and their output is discarded by linking them to a
 [`NullTarget`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.nulltarget) block.
+Faulting the blocks is achieved by invoking their [`Fault`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.idataflowblock.fault) method,
+passing a special `PipelineException` as argument.
+Faulting the blocks is required in order to empty their input and output buffers,
+so that the pipeline can complete ASAP. This special exception is not propagated
+through the `Completion` of the generated pipeline, but it can be observed by querying
+the `Completion` property of the individual blocks.
 
 ## Discussion
 
@@ -97,7 +124,7 @@ bool received = receivable.TryReceive(out string item);
 
 This library has no NuGet package. You can either [download](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/releases) the project and build it locally, or just
 embed the single code file [`PipelineBuilder.cs`](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/blob/main/src/SimpleTplDataflowPipelines/PipelineBuilder.cs)
-(~350 lines of code) into your project.
+(~400 lines of code) into your project.
 This library has been tested on the .NET Core 3.0, .NET 5 and .NET Framework 4.5 platforms.
 
 ## Performance
@@ -106,4 +133,4 @@ The pipelines created with the help of this library, are neither slower or faste
 the pipelines created manually by using the [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method. This library has not been
 micro-optimized regarding the allocation of the few, small, short-lived objects that are
 created during the construction of a pipeline. The emphasis has been put on simplicity,
-readability and correctness, than on writing the most GC-friendy code possible.
+readability and correctness, than on writing the most GC-friendly code possible.
