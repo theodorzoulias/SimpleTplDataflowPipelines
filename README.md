@@ -18,7 +18,7 @@ accumulated inside a flat [`AggregateException`](https://docs.microsoft.com/en-u
 [This](https://stackoverflow.com/questions/21603428/tpl-dataflow-exception-in-transform-block-with-bounded-capacity "TPL Dataflow exception in transform block with bounded capacity") StackOverflow question
 provides a deeper insight about why this library exists.
 The problem with building pipelines using the traditional [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method,
-configured with the [`PropagateCompletion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowlinkoptions.propagatecompletion) option,
+configured with the [`PropagateCompletion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowlinkoptions.propagatecompletion) option set to `true`,
 is that it allows the possibility of deadlocks and leaked
 fire-and-forget dataflow blocks:
 
@@ -36,7 +36,7 @@ fire-and-forget blocks, consuming resources and potentialy modifying the state o
 application in unpredictable ways. Or they can just get stuck and become the source of a
 deadlock, as described previously.
 
-3. The standard approach for propagating errors, the `PropagateCompletion` option,
+3. The standard approach for propagating errors, the `PropagateCompletion = true` option,
 results to deeply nested [`AggregateException`](https://docs.microsoft.com/en-us/dotnet/api/system.aggregateexception)s.
 
 This library attempts to fix these problems.
