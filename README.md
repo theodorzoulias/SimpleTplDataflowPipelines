@@ -37,7 +37,7 @@ application in unpredictable ways. Or they can just get stuck and become the sou
 deadlock, as described previously.
 
 3. The standard approach for propagating errors, the `PropagateCompletion = true` option,
-results to deeply nested [`AggregateException`](https://docs.microsoft.com/en-us/dotnet/api/system.aggregateexception)s.
+results in deeply nested [`AggregateException`](https://docs.microsoft.com/en-us/dotnet/api/system.aggregateexception)s.
 
 This library attempts to fix these problems.
 
