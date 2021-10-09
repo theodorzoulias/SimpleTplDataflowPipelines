@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -321,6 +322,28 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Count == 1);
             Assert.IsTrue(aex.InnerException is ApplicationException);
             Assert.IsTrue(!done);
+        }
+
+        [TestMethod]
+        public void TimelyCompletionOfLinkedBlocks()
+        {
+            var block1 = new TransformBlock<int, int>(async x => { await Task.Delay(50); return x; });
+            var block2 = new ActionBlock<int>(async _ => { await Task.Delay(50); throw new ApplicationException(); });
+
+            var pipeline = PipelineBuilder
+                .BeginWith(block1)
+                .LinkTo(block2)
+                .ToPipeline();
+
+            foreach (var item in Enumerable.Range(1, 10)) pipeline.Post(item);
+            pipeline.Complete();
+            var stopwatch = Stopwatch.StartNew();
+            var aex = Assert.ThrowsException<AggregateException>(
+                () => pipeline.Completion.Wait());
+            stopwatch.Stop();
+            Assert.IsTrue(aex.InnerExceptions.Count == 1);
+            Assert.IsTrue(aex.InnerException is ApplicationException);
+            Assert.IsTrue(stopwatch.ElapsedMilliseconds < 200, stopwatch.Elapsed.ToString());
         }
 
         /*
