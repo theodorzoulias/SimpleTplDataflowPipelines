@@ -21,8 +21,7 @@ namespace SimpleTplDataflowPipelines
             IPropagatorBlock<TInput, TOutput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var action = PipelineCommon.CreateLinkDelegate(null, block, block);
-            return new PipelineBuilder<TInput, TOutput>(block, block, new LinkDelegate[] { action });
+            return new PipelineBuilder<TInput, TOutput>(block, block, null);
         }
 
         /// <summary>
@@ -31,18 +30,17 @@ namespace SimpleTplDataflowPipelines
         public static PipelineBuilder<TInput> BeginWith<TInput>(ITargetBlock<TInput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var action = PipelineCommon.CreateLinkDelegate(null, block, (ISourceBlock<object>)null);
-            return new PipelineBuilder<TInput>(block, new LinkDelegate[] { action });
+            return new PipelineBuilder<TInput>(block, block, null);
         }
     }
+
+    internal delegate Action LinkDelegate(
+        List<Task> completions, List<Action> failureActions, Action onError);
 
     internal class PipelineException : Exception
     {
         internal PipelineException() : base("Another block owned by the same pipeline failed.") { }
     }
-
-    internal delegate Action LinkDelegate(
-        List<Task> completions, List<Action> failureActions, Action onError);
 
     /// <summary>
     /// An immutable struct that holds the metadata for building a pipeline without output.
@@ -50,13 +48,16 @@ namespace SimpleTplDataflowPipelines
     public readonly struct PipelineBuilder<TInput>
     {
         private readonly ITargetBlock<TInput> _target;
+        private readonly IDataflowBlock _lastBlock;
         private readonly LinkDelegate[] _linkDelegates;
 
-        internal PipelineBuilder(ITargetBlock<TInput> target, LinkDelegate[] linkDelegates)
+        internal PipelineBuilder(ITargetBlock<TInput> target, IDataflowBlock lastBlock,
+            LinkDelegate[] linkDelegates)
         {
             Debug.Assert(target != null);
-            Debug.Assert(linkDelegates != null);
+            Debug.Assert(lastBlock != null);
             _target = target;
+            _lastBlock = lastBlock;
             _linkDelegates = linkDelegates;
         }
 
@@ -75,7 +76,9 @@ namespace SimpleTplDataflowPipelines
         public ITargetBlock<TInput> ToPipeline()
         {
             if (_target == null) throw new InvalidOperationException();
-            var completion = PipelineCommon.CreatePipeline(_target, _linkDelegates);
+            var action = PipelineCommon.CreateLinkDelegate<object>(_lastBlock, null, null);
+            var newActions = PipelineCommon.Append(_linkDelegates, action);
+            var completion = PipelineCommon.CreatePipeline(_target, newActions);
             return new Pipeline<TInput>(_target, completion);
         }
     }
@@ -94,7 +97,6 @@ namespace SimpleTplDataflowPipelines
         {
             Debug.Assert(target != null);
             Debug.Assert(source != null);
-            Debug.Assert(linkDelegates != null);
             _target = target;
             _source = source;
             _linkDelegates = linkDelegates;
@@ -110,7 +112,7 @@ namespace SimpleTplDataflowPipelines
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
             var source = _source;
-            var action = PipelineCommon.CreateLinkDelegate(source, block, block);
+            var action = PipelineCommon.CreateLinkDelegate(source, source, block);
             var newActions = PipelineCommon.Append(_linkDelegates, action);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, newActions);
         }
@@ -124,9 +126,9 @@ namespace SimpleTplDataflowPipelines
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
             var source = _source;
-            var action = PipelineCommon.CreateLinkDelegate(source, block, (ISourceBlock<object>)null);
+            var action = PipelineCommon.CreateLinkDelegate(source, source, block);
             var newActions = PipelineCommon.Append(_linkDelegates, action);
-            return new PipelineBuilder<TInput>(_target, newActions);
+            return new PipelineBuilder<TInput>(_target, block, newActions);
         }
 
         /// <summary>
@@ -145,13 +147,21 @@ namespace SimpleTplDataflowPipelines
         {
             if (_target == null) throw new InvalidOperationException();
             Debug.Assert(_source != null);
-            var completion = PipelineCommon.CreatePipeline(_target, _linkDelegates);
+            var action = PipelineCommon.CreateLinkDelegate(_source, _source, null);
+            var newActions = PipelineCommon.Append(_linkDelegates, action);
+            var completion = PipelineCommon.CreatePipeline(_target, newActions);
             return new Pipeline<TInput, TOutput>(_target, _source, completion);
         }
     }
 
     internal static class PipelineCommon
     {
+        //private static readonly PipelineException _pipelineExceptionInstance
+        //    = new PipelineException();
+
+        private static readonly DataflowLinkOptions _nullTargetLinkOptions
+            = new DataflowLinkOptions() { Append = false };
+
         internal static Task CreatePipeline<TInput>(ITargetBlock<TInput> target,
             LinkDelegate[] linkDelegates)
         {
@@ -179,8 +189,7 @@ namespace SimpleTplDataflowPipelines
                 finalActions.Add(finalAction);
             }
 
-            // Invoking the finalActions attaches the OnlyOnFaulted continuations
-            // to all blocks
+            // Invoking the finalActions attaches a continuation to all blocks
             foreach (var finalAction in finalActions) finalAction();
 
             // Combine the completions of all blocks, excluding the sentinel exceptions
@@ -194,32 +203,41 @@ namespace SimpleTplDataflowPipelines
             }).Unwrap();
         }
 
-        internal static LinkDelegate CreateLinkDelegate<TOutput, TOutput2>(
-            ISourceBlock<TOutput> source, ITargetBlock<TOutput> target,
-            ISourceBlock<TOutput2> targetAsSource)
+        internal static LinkDelegate CreateLinkDelegate<TOutput>(IDataflowBlock block,
+            ISourceBlock<TOutput> blockAsSource, ITargetBlock<TOutput> target)
         {
+            Debug.Assert(block != null);
             return new LinkDelegate((completions, failureActions, onError)
                 => PipelineCommon.LinkTo(
-                    source, target, targetAsSource, completions, onError, failureActions));
+                    block, blockAsSource, target, completions, failureActions, onError));
         }
 
-        private static readonly PipelineException _sentinelExceptionInstance
-            = new PipelineException();
-
-        private static readonly DataflowLinkOptions _nullTargetLinkOptions
-            = new DataflowLinkOptions() { Append = false };
-
-        internal static Action LinkTo<TOutput, TOutput2>(
-            ISourceBlock<TOutput> source, ITargetBlock<TOutput> target,
-            ISourceBlock<TOutput2> targetAsSource,
-            List<Task> completions, Action onError, List<Action> failureActions)
+        internal static Action LinkTo<TOutput>(IDataflowBlock block,
+            ISourceBlock<TOutput> blockAsSource, ITargetBlock<TOutput> target,
+            List<Task> completions, List<Action> failureActions, Action onError)
         {
-            Debug.Assert(target != null);
+            Debug.Assert(block != null);
+            Debug.Assert(!(target != null && blockAsSource == null));
+            //if (target != null) Debug.Assert(blockAsSource != null);
+            //Debug.Assert((blockAsSource == null) == (target == null));
             Debug.Assert(completions != null);
             Debug.Assert(onError != null);
             Debug.Assert(failureActions != null);
 
-            completions.Add(target.Completion);
+            completions.Add(block.Completion);
+            //ISourceBlock<TOutput> source = block as ISourceBlock<TOutput>;
+
+            Action failureAction = () =>
+            {
+                if (block.Completion.IsCompleted) return;
+                block.Fault(new PipelineException());
+                // Discard the output of the block, if it's actually a source block.
+                // The last block in the pipeline may not be a source block.
+                if (blockAsSource != null)
+                    _ = blockAsSource.LinkTo(
+                        DataflowBlock.NullTarget<TOutput>(), _nullTargetLinkOptions);
+            };
+            lock (failureActions) failureActions.Add(failureAction);
 
             // Propagating the completion of the blocks follows the same pattern implemented
             // internally by the TPL Dataflow library. The ContinueWith method is used for
@@ -230,43 +248,26 @@ namespace SimpleTplDataflowPipelines
             // according to the documentation, the invoked APIs (Complete, LinkTo, NullTarget)
             // do not throw exceptions.
 
-            // The source is always null for the first block in the pipeline
-            if (source != null)
-            {
-                // Storing the IDisposable returned by the LinkTo, and disposing it after
-                // the completion of the block, would serve no purpose. All links are
-                // released automatically anyway when a block completes.
-                _ = source.LinkTo(target);
-
-                // Propagate the completion to the target.
-                _ = source.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(() =>
-                {
-                    target.Complete();
-                }), default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
-            }
-
-            Action failureAction = () =>
-            {
-                if (target.Completion.IsCompleted) return;
-                target.Fault(_sentinelExceptionInstance);
-                if (targetAsSource != null)
-                {
-                    // Discard the output of the target block, if it's itself a source block
-                    // The targetAsSource may be null only for the last block in the pipeline
-                    _ = targetAsSource.LinkTo(
-                        DataflowBlock.NullTarget<TOutput2>(), _nullTargetLinkOptions);
-                }
-            };
-            lock (failureActions) failureActions.Add(failureAction);
-
             // The onError delegate must not be invoked before all failureActions have been
             // added in the list, hence the need to return an Action here, instead
-            // of attaching the OnlyOnFaulted continuation immediately.
+            // of attaching the continuation immediately.
             return () =>
             {
-                _ = target.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(onError),
-                    default, TaskContinuationOptions.OnlyOnFaulted |
-                    TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
+                if (target != null)
+                {
+                    // Storing the IDisposable returned by the LinkTo, and disposing it after
+                    // the completion of the block, would serve no purpose. All links are
+                    // released automatically anyway when a block completes.
+                    _ = blockAsSource.LinkTo(target);
+                }
+
+                _ = block.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(() =>
+                {
+                    if (t.IsFaulted)
+                        onError(); // Signal that the pipeline has failed
+                    else if (target != null)
+                        target.Complete(); // Propagate the completion to the target
+                }), default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
             };
         }
 
