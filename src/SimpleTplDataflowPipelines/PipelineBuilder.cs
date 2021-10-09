@@ -31,13 +31,9 @@ namespace SimpleTplDataflowPipelines
         public static PipelineBuilder<TInput> BeginWith<TInput>(ITargetBlock<TInput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var action = PipelineCommon.CreateLinkDelegate<TInput, object>(null, block, null);
+            var action = PipelineCommon.CreateLinkDelegate(null, block, (ISourceBlock<object>)null);
             return new PipelineBuilder<TInput>(block, new LinkDelegate[] { action });
         }
-
-        //internal struct Connection
-        //{
-        //}
     }
 
     internal delegate Action LinkDelegate(
@@ -54,6 +50,7 @@ namespace SimpleTplDataflowPipelines
         internal PipelineBuilder(ITargetBlock<TInput> target, LinkDelegate[] linkDelegates)
         {
             Debug.Assert(target != null);
+            Debug.Assert(linkDelegates != null);
             _target = target;
             _linkDelegates = linkDelegates;
         }
@@ -87,8 +84,12 @@ namespace SimpleTplDataflowPipelines
         private readonly ISourceBlock<TOutput> _source;
         private readonly LinkDelegate[] _linkDelegates;
 
-        internal PipelineBuilder(ITargetBlock<TInput> target, ISourceBlock<TOutput> source, LinkDelegate[] linkDelegates)
+        internal PipelineBuilder(ITargetBlock<TInput> target, ISourceBlock<TOutput> source,
+            LinkDelegate[] linkDelegates)
         {
+            Debug.Assert(target != null);
+            Debug.Assert(source != null);
+            Debug.Assert(linkDelegates != null);
             _target = target;
             _source = source;
             _linkDelegates = linkDelegates;
@@ -118,7 +119,7 @@ namespace SimpleTplDataflowPipelines
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
             var source = _source;
-            var action = PipelineCommon.CreateLinkDelegate<TOutput, object>(source, block, null);
+            var action = PipelineCommon.CreateLinkDelegate(source, block, (ISourceBlock<object>)null);
             var newActions = PipelineCommon.Append(_linkDelegates, action);
             return new PipelineBuilder<TInput>(_target, newActions);
         }
@@ -155,20 +156,26 @@ namespace SimpleTplDataflowPipelines
             var failureActions = new List<Action>();
             Action onError = () =>
             {
+                Action[] failureActionsLocal;
                 lock (failureActions)
                 {
-                    foreach (var failureAction in failureActions) failureAction();
+                    failureActionsLocal = failureActions.ToArray();
                     failureActions.Clear();
                 }
+                foreach (var failureAction in failureActionsLocal) failureAction();
             };
+
             // Invoking the linkDelegates links all the blocks together, and populates the
-            // completions list with the `Completion`s of all blocks.
+            // completions and failureActions lists.
             var finalActions = new List<Action>();
             foreach (var linkDelegate in linkDelegates)
             {
                 var finalAction = linkDelegate(completions, failureActions, onError);
                 finalActions.Add(finalAction);
             }
+
+            // Invoking the finalActions attaches the OnlyOnFaulted continuations
+            // to all blocks
             foreach (var finalAction in finalActions) finalAction();
             return Task.WhenAll(completions);
         }
@@ -178,8 +185,12 @@ namespace SimpleTplDataflowPipelines
             ISourceBlock<TOutput2> targetAsSource)
         {
             return new LinkDelegate((completions, failureActions, onError)
-                => PipelineCommon.LinkTo(source, target, targetAsSource, completions, onError, failureActions));
+                => PipelineCommon.LinkTo(
+                    source, target, targetAsSource, completions, onError, failureActions));
         }
+
+        private static readonly DataflowLinkOptions _nullTargetLinkOptions
+            = new DataflowLinkOptions() { Append = false };
 
         internal static Action LinkTo<TOutput, TOutput2>(
             ISourceBlock<TOutput> source, ITargetBlock<TOutput> target,
@@ -190,28 +201,30 @@ namespace SimpleTplDataflowPipelines
             Debug.Assert(completions != null);
             Debug.Assert(onError != null);
             Debug.Assert(failureActions != null);
+
             completions.Add(target.Completion);
 
+            // Propagating the completion of the blocks follows the same pattern implemented
+            // internally by the TPL Dataflow library. The ContinueWith method is used for
+            // creating fire-and-forget continuations, with any error thrown inside the
+            // continuations propagated to the ThreadPool.
+            // https://source.dot.net/System.Threading.Tasks.Dataflow/Internal/Common.cs.html#7160be0ba468d387
+            // It's extremely unlikely that any of these continuations will ever fail since,
+            // according to the documentation, the invoked APIs (Complete, LinkTo, NullTarget)
+            // do not throw exceptions.
+
+            // The source is always null for the first block in the pipeline
             if (source != null)
             {
                 // Storing the IDisposable returned by the LinkTo, and disposing it after
-                // the completion of the block, serves no purpose. All links are released
-                // automatically anyway when a block completes.
-                // Also allowing the dismantling of the pipeline before its completion, is a
-                // functionality that is not likely to be useful in many scenarios.
+                // the completion of the block, would serve no purpose. All links are
+                // released automatically anyway when a block completes.
                 _ = source.LinkTo(target);
 
-                // Propagating the completion of the blocks follows the same pattern implemented
-                // internally by the TPL Dataflow library. The ContinueWith method is used for
-                // creating fire-and-forget continuations, with any error thrown inside the
-                // continuations propagated to the ThreadPool.
-                // https://source.dot.net/System.Threading.Tasks.Dataflow/Internal/Common.cs.html#7160be0ba468d387
-                // It's extremely unlikely that any of these continuations will ever fail since,
-                // according to the documentation, the invoked APIs do not throw exceptions.
-
+                // Propagate the completion to the target.
                 _ = source.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(() =>
                 {
-                    target.Complete(); // Propagate the completion to the target.
+                    target.Complete(); 
                 }), default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
             }
 
@@ -221,17 +234,21 @@ namespace SimpleTplDataflowPipelines
                 target.Complete();
                 if (targetAsSource != null)
                 {
-                    // Discard output
-                    _ = targetAsSource.LinkTo(DataflowBlock.NullTarget<TOutput2>());
+                    // Discard the output of the target block, if it's itself a source block
+                    // The targetAsSource may be null only for the last block in the pipeline
+                    _ = targetAsSource.LinkTo(
+                        DataflowBlock.NullTarget<TOutput2>(), _nullTargetLinkOptions);
                 }
             });
 
+            // The onError delegate must not be invoked before all failureActions have been
+            // added in the list, hence the need to return an Action here, instead
+            // of attaching the OnlyOnFaulted continuation immediately.
             return () =>
             {
-                _ = target.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(() =>
-                {
-                    onError();
-                }), default, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
+                _ = target.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(onError),
+                    default, TaskContinuationOptions.OnlyOnFaulted |
+                    TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
             };
         }
 

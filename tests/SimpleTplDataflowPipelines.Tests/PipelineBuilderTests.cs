@@ -104,7 +104,7 @@ namespace SimpleTplDataflowPipelines.Tests
             // https://stackoverflow.com/questions/21603428/tpl-dataflow-exception-in-transform-block-with-bounded-capacity
             var block1 = new BufferBlock<int>(new DataflowBlockOptions() { BoundedCapacity = 1 });
 
-            var block2 = new ActionBlock<int>(x => throw new ApplicationException(),
+            var block2 = new ActionBlock<int>(async x => { await Task.Delay(50); throw new ApplicationException(); },
                 new ExecutionDataflowBlockOptions() { BoundedCapacity = 2, MaxDegreeOfParallelism = 2 });
 
             var pipeline = PipelineBuilder
@@ -168,11 +168,11 @@ namespace SimpleTplDataflowPipelines.Tests
         public void ExceptionsFromMultipleBlocks()
         {
             var block1 = new TransformBlock<int, int>(
-                x => { if (x == 4) { throw new ApplicationException(x.ToString()); } return x; });
+                async x => { if (x == 4) { await Task.Delay(50); throw new ApplicationException(x.ToString()); } return x; });
             var block2 = new TransformBlock<int, int>(
                 async x => { if (x >= 3) { await Task.Delay(50); throw new ApplicationException(x.ToString()); } return x; });
             var block3 = new ActionBlock<int>(
-                async x => { await Task.Delay(100); throw new ApplicationException(x.ToString()); },
+                async x => { await Task.Delay(50); throw new ApplicationException(x.ToString()); },
                 new ExecutionDataflowBlockOptions() { MaxDegreeOfParallelism = 2 });
 
             var pipeline = PipelineBuilder
@@ -188,7 +188,7 @@ namespace SimpleTplDataflowPipelines.Tests
             pipeline.Complete();
             var aex = Assert.ThrowsException<AggregateException>(
                 () => pipeline.Completion.Wait());
-            Assert.IsTrue(aex.InnerExceptions.Count == 4, aex.InnerExceptions.Count.ToString());
+            Assert.IsTrue(aex.InnerExceptions.Count == 4, String.Join(", ", aex.InnerExceptions.Select(ex => ex.Message)));
             Assert.IsTrue(aex.InnerExceptions.All(ex => ex is ApplicationException));
             Assert.IsTrue(aex.InnerExceptions.Select(ex => ex.Message).OrderBy(x => x).SequenceEqual(new[] { "1", "2", "3", "4" }));
         }
@@ -294,6 +294,33 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(ex.CancellationToken != cts.Token); // TPL Dataflow doesn't preserve the token
             Assert.IsTrue(pipeline.Completion.IsCanceled);
             Console.WriteLine($"Count: {count}");
+        }
+
+        [TestMethod]
+        public void CreatePipelineWithBlocksAlreadyFaulted()
+        {
+            bool done = false;
+            var block1 = new TransformBlock<int, string>(_ => "");
+            var block2 = new TransformBlock<string, int>(_ => 0);
+            var block3 = new ActionBlock<int>(_ => done = true);
+
+            ((IDataflowBlock)block2).Fault(new ApplicationException());
+            Assert.ThrowsException<AggregateException>(
+                () => block2.Completion.Wait(TimeSpan.FromMilliseconds(100)));
+
+            var pipeline = PipelineBuilder
+                .BeginWith(block1)
+                .LinkTo(block2)
+                .LinkTo(block3)
+                .ToPipeline();
+
+            pipeline.Post(0);
+            pipeline.Complete();
+            var aex = Assert.ThrowsException<AggregateException>(
+                () => pipeline.Completion.Wait());
+            Assert.IsTrue(aex.InnerExceptions.Count == 1);
+            Assert.IsTrue(aex.InnerException is ApplicationException);
+            Assert.IsTrue(!done);
         }
 
         /*
