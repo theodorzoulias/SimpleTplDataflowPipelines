@@ -224,8 +224,8 @@ namespace SimpleTplDataflowPipelines
             Debug.Assert(block != null);
             Debug.Assert(!(target != null && blockAsSource == null));
             Debug.Assert(completions != null);
-            Debug.Assert(onError != null);
             Debug.Assert(failureActions != null);
+            Debug.Assert(onError != null);
 
             completions.Add(block.Completion);
 
