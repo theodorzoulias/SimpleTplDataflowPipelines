@@ -36,6 +36,11 @@ namespace SimpleTplDataflowPipelines
         }
     }
 
+    internal class PipelineException : Exception
+    {
+        internal PipelineException() : base("Another block owned by the same pipeline failed.") { }
+    }
+
     internal delegate Action LinkDelegate(
         List<Task> completions, List<Action> failureActions, Action onError);
 
@@ -177,7 +182,16 @@ namespace SimpleTplDataflowPipelines
             // Invoking the finalActions attaches the OnlyOnFaulted continuations
             // to all blocks
             foreach (var finalAction in finalActions) finalAction();
-            return Task.WhenAll(completions);
+
+            // Combine the completions of all blocks, excluding the sentinel exceptions
+            return Task.WhenAll(completions).ContinueWith(t =>
+            {
+                if (!t.IsFaulted) return t;
+                var tcs = new TaskCompletionSource<object>();
+                tcs.SetException(
+                    t.Exception.InnerExceptions.Where(ex => !(ex is PipelineException)));
+                return tcs.Task;
+            }).Unwrap();
         }
 
         internal static LinkDelegate CreateLinkDelegate<TOutput, TOutput2>(
@@ -188,6 +202,9 @@ namespace SimpleTplDataflowPipelines
                 => PipelineCommon.LinkTo(
                     source, target, targetAsSource, completions, onError, failureActions));
         }
+
+        private static readonly PipelineException _sentinelExceptionInstance
+            = new PipelineException();
 
         private static readonly DataflowLinkOptions _nullTargetLinkOptions
             = new DataflowLinkOptions() { Append = false };
@@ -224,14 +241,14 @@ namespace SimpleTplDataflowPipelines
                 // Propagate the completion to the target.
                 _ = source.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(() =>
                 {
-                    target.Complete(); 
+                    target.Complete();
                 }), default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
             }
 
             Action failureAction = () =>
             {
                 if (target.Completion.IsCompleted) return;
-                target.Complete();
+                target.Fault(_sentinelExceptionInstance);
                 if (targetAsSource != null)
                 {
                     // Discard the output of the target block, if it's itself a source block

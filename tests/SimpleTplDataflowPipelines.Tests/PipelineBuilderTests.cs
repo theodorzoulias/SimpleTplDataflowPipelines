@@ -128,7 +128,7 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Count == 2, aex.InnerExceptions.Count.ToString());
             Assert.IsTrue(aex.InnerExceptions.All(ex => ex is ApplicationException));
             Assert.IsTrue(block1.Count == 0);
-            Assert.IsTrue(block1.Completion.IsCompletedSuccessfully());
+            Assert.IsTrue(block1.Completion.IsFaulted);
             Assert.IsTrue(block2.Completion.IsFaulted);
         }
 
@@ -161,7 +161,7 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Count == 1, aex.InnerExceptions.Count.ToString());
             Assert.IsTrue(aex.InnerException is ApplicationException);
             Assert.IsTrue(blocks.All(block => block.OutputCount == 0));
-            Assert.IsTrue(blocks.All(block => block.Completion.IsCompletedSuccessfully()));
+            Assert.IsTrue(blocks.All(block => block.Completion.IsFaulted));
             Assert.IsTrue(finalBlock.Completion.IsFaulted);
         }
 
@@ -172,14 +172,16 @@ namespace SimpleTplDataflowPipelines.Tests
                 async x => { if (x == 4) { await Task.Delay(50); throw new ApplicationException(x.ToString()); } return x; });
             var block2 = new TransformBlock<int, int>(
                 async x => { if (x >= 3) { await Task.Delay(50); throw new ApplicationException(x.ToString()); } return x; });
-            var block3 = new ActionBlock<int>(
+            var block3 = new TransformBlock<int, int>(
                 async x => { await Task.Delay(50); throw new ApplicationException(x.ToString()); },
                 new ExecutionDataflowBlockOptions() { MaxDegreeOfParallelism = 2 });
+            var block4 = new ActionBlock<int>(_ => {});
 
             var pipeline = PipelineBuilder
                 .BeginWith(block1)
                 .LinkTo(block2)
                 .LinkTo(block3)
+                .LinkTo(block4)
                 .ToPipeline();
 
             pipeline.Post(1);
@@ -192,6 +194,9 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Count == 4, String.Join(", ", aex.InnerExceptions.Select(ex => ex.Message)));
             Assert.IsTrue(aex.InnerExceptions.All(ex => ex is ApplicationException));
             Assert.IsTrue(aex.InnerExceptions.Select(ex => ex.Message).OrderBy(x => x).SequenceEqual(new[] { "1", "2", "3", "4" }));
+            Assert.IsTrue(block4.Completion.IsFaulted);
+            Assert.IsTrue(block4.Completion.Exception.InnerExceptions.Count == 1);
+            Assert.IsTrue(block4.Completion.Exception.InnerException.GetType().Name == "PipelineException");
         }
 
         [TestMethod]
@@ -343,7 +348,7 @@ namespace SimpleTplDataflowPipelines.Tests
             stopwatch.Stop();
             Assert.IsTrue(aex.InnerExceptions.Count == 1);
             Assert.IsTrue(aex.InnerException is ApplicationException);
-            Assert.IsTrue(stopwatch.ElapsedMilliseconds < 200, stopwatch.Elapsed.ToString());
+            Assert.IsTrue(stopwatch.ElapsedMilliseconds < 400, stopwatch.Elapsed.ToString());
         }
 
         /*
