@@ -135,7 +135,7 @@ This library has been tested on the .NET Core 3.0, .NET 5 and .NET Framework 4.5
 
 ## Performance
 
-The pipelines created with the help of this library, are neither slower or faster that
+The pipelines created with the help of this library, are neither slower or faster than
 the pipelines created manually by using the [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method. This library has not been
 micro-optimized regarding the allocation of the few, small, short-lived objects that are
 created during the construction of a pipeline. The emphasis has been put on simplicity,

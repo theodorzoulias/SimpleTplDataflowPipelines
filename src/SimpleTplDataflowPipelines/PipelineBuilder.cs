@@ -38,11 +38,11 @@ namespace SimpleTplDataflowPipelines
         List<Task> completions, List<Action> failureActions, Action onError);
 
     /// <summary>
-    /// Represents an error that occurred in another dataflow block, owned by the same pipeline.
+    /// Represents an error that occurred in an other dataflow block, owned by the same pipeline.
     /// </summary>
     public class PipelineException : Exception
     {
-        internal PipelineException() : base("Another block owned by the same pipeline failed.") { }
+        internal PipelineException() : base("An other dataflow block, owned by the same pipeline, failed.") { }
     }
 
     /// <summary>
