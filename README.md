@@ -5,9 +5,10 @@
 This library helps at building simple [TPL Dataflow](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/dataflow-task-parallel-library) pipelines,
 that enforce the following guarantees:
 
-1. In case any constituent block fails, all other blocks will complete as soon as possible.
+1. In case any constituent dataflow block fails, all the other blocks will complete
+as soon as possible.
 2. When a pipeline as a whole completes either successfully or with an error, all of its
-constituent blocks will be also completed.
+constituent dataflow blocks will be also completed.
 3. The [`Completion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.idataflowblock.completion)
 of the pipeline propagates all errors that may have occurred in all blocks,
 accumulated inside a flat [`AggregateException`](https://docs.microsoft.com/en-us/dotnet/api/system.aggregateexception).
@@ -19,21 +20,24 @@ provides a deeper insight about why this library exists.
 The problem with building pipelines using the traditional [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method,
 configured with the [`PropagateCompletion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowlinkoptions.propagatecompletion) option,
 is that it allows the possibility of deadlocks and leaked
-active fire-and-forget blocks:
+fire-and-forget dataflow blocks:
 
 1. A deadlock can occur in case a producer is blocked, waiting
-for empty space in the input buffer of the first block of a bounded pipeline, and any other
+for empty space in the input buffer of the first dataflow block of a bounded pipeline, and any other
 block except from the first one fails. In this case the producer will never be unblocked,
 because the first block will postpone all incoming messages ad infinitum, never accepting
 or declining any offered message.
 
 2. A leaked fire-and-forget block can occur under similar
-circumstances. When any but the first block fails, the error will be propagated
+circumstances. When any but the first dataflow block fails, the error will be propagated
 downstream but not upstream. So the pipeline will soon signal its completion, while
 some blocks near the top may still be in a running state. These blocks will be leaked as
 fire-and-forget blocks, consuming resources and potentialy modifying the state of the
 application in unpredictable ways. Or they can just get stuck and become the source of a
 deadlock, as described previously.
+
+3. The standard approach for propagating errors, the `PropagateCompletion` option,
+results to deeply nested [`AggregateException`](https://docs.microsoft.com/en-us/dotnet/api/system.aggregateexception)s.
 
 This library attempts to fix these problems.
 
@@ -80,7 +84,7 @@ Whether it can emit messages depends on the type of the last block added in the 
 
 When the pipeline is created, all the blocks are linked automatically with the built-in [`LinkTo`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.linkto) method,
 configured with the [`PropagateCompletion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowlinkoptions.propagatecompletion) option set to `false`.
-Then a continuation is attached to the completion of each block, that takes an appropriate
+Then a continuation is attached to the `Completion` of each block, that takes an appropriate
 action depending on how the block was completed. If the block was completed successfully or
 it was canceled, the completion is propagated to the next block by invoking the next block's
 [`Complete`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.idataflowblock.complete) method.
@@ -92,7 +96,9 @@ passing a special `PipelineException` as argument.
 Faulting the blocks is required in order to empty their input and output buffers,
 so that the pipeline can complete ASAP. This special exception is not propagated
 through the `Completion` of the generated pipeline, but it can be observed by querying
-the `Completion` property of the individual blocks.
+the `Completion` property of the individual blocks. Observing this exception just means that
+this block was not the first that failed. It is possible that the `PipelineException`
+may coexist with other exceptions in the same dataflow block.
 
 ## Discussion
 

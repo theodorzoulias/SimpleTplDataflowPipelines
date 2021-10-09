@@ -71,8 +71,9 @@ namespace SimpleTplDataflowPipelines
         /// <remarks>
         /// After calling this method, the blocks have been linked and are now owned by
         /// the pipeline for the rest of their existence.
-        /// The pipeline represents the completion of all blocks, and propagates all of
-        /// their errors. The pipeline completes when all the blocks have completed.
+        /// The pipeline represents the completion of its constituent blocks, and
+        /// propagates all of their errors. The pipeline completes when all the blocks
+        /// have completed.
         /// If any block fails, the whole pipeline fails, and all non-completed blocks
         /// are forcefully completed and their output is discarded.
         /// </remarks>
@@ -143,8 +144,9 @@ namespace SimpleTplDataflowPipelines
         /// <remarks>
         /// After calling this method, the blocks have been linked and are now owned by
         /// the pipeline for the rest of their existence.
-        /// The pipeline represents the completion of all blocks, and propagates all of
-        /// their errors. The pipeline completes when all the blocks have completed.
+        /// The pipeline represents the completion of its constituent blocks, and
+        /// propagates all of their errors. The pipeline completes when all the blocks
+        /// have completed.
         /// If any block fails, the whole pipeline fails, and all non-completed blocks
         /// are forcefully completed and their output is discarded.
         /// </remarks>
@@ -170,6 +172,7 @@ namespace SimpleTplDataflowPipelines
         {
             Debug.Assert(target != null);
             Debug.Assert(linkDelegates != null);
+
             var completions = new List<Task>();
             var failureActions = new List<Action>();
             Action onError = () =>
@@ -183,19 +186,18 @@ namespace SimpleTplDataflowPipelines
                 foreach (var failureAction in failureActionsLocal) failureAction();
             };
 
-            // Invoking the linkDelegates links all the blocks together, and populates the
-            // completions and failureActions lists.
+            // Invoking the linkDelegates populates the completions and failureActions lists.
             var finalActions = new List<Action>();
             foreach (var linkDelegate in linkDelegates)
             {
-                var finalAction = linkDelegate(completions, failureActions, onError);
-                finalActions.Add(finalAction);
+                finalActions.Add(linkDelegate(completions, failureActions, onError));
             }
 
-            // Invoking the finalActions attaches a continuation to all blocks
+            // Invoking the finalActions links all the blocks together, and attaches a
+            // continuation to each block.
             foreach (var finalAction in finalActions) finalAction();
 
-            // Combine the completions of all blocks, excluding the sentinel exceptions
+            // Combine the completions of all blocks, excluding the sentinel exceptions.
             return Task.WhenAll(completions).ContinueWith(t =>
             {
                 if (!t.IsFaulted) return t;
@@ -227,7 +229,7 @@ namespace SimpleTplDataflowPipelines
 
             completions.Add(block.Completion);
 
-            Action failureAction = () =>
+            failureActions.Add(() =>
             {
                 if (block.Completion.IsCompleted) return;
                 block.Fault(new PipelineException());
@@ -236,8 +238,7 @@ namespace SimpleTplDataflowPipelines
                 if (blockAsSource != null)
                     _ = blockAsSource.LinkTo(
                         DataflowBlock.NullTarget<TOutput>(), _nullTargetLinkOptions);
-            };
-            lock (failureActions) failureActions.Add(failureAction);
+            });
 
             // Propagating the completion of the blocks follows the same pattern implemented
             // internally by the TPL Dataflow library. The ContinueWith method is used for
