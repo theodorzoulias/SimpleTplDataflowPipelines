@@ -74,7 +74,7 @@ namespace SimpleTplDataflowPipelines
         /// The pipeline represents the completion of its constituent blocks, and
         /// propagates all of their errors. The pipeline completes when all the blocks
         /// have completed.
-        /// If any block fails, the whole pipeline fails, and all non-completed blocks
+        /// If any block fails, the whole pipeline fails, and all the non-completed blocks
         /// are forcefully completed and their output is discarded.
         /// </remarks>
         public ITargetBlock<TInput> ToPipeline()
@@ -147,7 +147,7 @@ namespace SimpleTplDataflowPipelines
         /// The pipeline represents the completion of its constituent blocks, and
         /// propagates all of their errors. The pipeline completes when all the blocks
         /// have completed.
-        /// If any block fails, the whole pipeline fails, and all non-completed blocks
+        /// If any block fails, the whole pipeline fails, and all the non-completed blocks
         /// are forcefully completed and their output is discarded.
         /// </remarks>
         public IPropagatorBlock<TInput, TOutput> ToPipeline()
