@@ -175,7 +175,7 @@ namespace SimpleTplDataflowPipelines.Tests
             var block3 = new TransformBlock<int, int>(
                 async x => { await Task.Delay(50); throw new ApplicationException(x.ToString()); },
                 new ExecutionDataflowBlockOptions() { MaxDegreeOfParallelism = 2 });
-            var block4 = new ActionBlock<int>(_ => {});
+            var block4 = new ActionBlock<int>(_ => { });
 
             var pipeline = PipelineBuilder
                 .BeginWith(block1)
