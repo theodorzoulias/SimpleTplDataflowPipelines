@@ -48,7 +48,7 @@ namespace SimpleTplDataflowPipelines
     /// <summary>
     /// An immutable struct that holds the metadata for building a pipeline without output.
     /// </summary>
-    public readonly struct PipelineBuilder<TInput>
+    public struct PipelineBuilder<TInput>
     {
         private readonly ITargetBlock<TInput> _target;
         private readonly IDataflowBlock _lastBlock;
@@ -92,7 +92,7 @@ namespace SimpleTplDataflowPipelines
     /// <summary>
     /// An immutable struct that holds the metadata for building a pipeline.
     /// </summary>
-    public readonly struct PipelineBuilder<TInput, TOutput>
+    public struct PipelineBuilder<TInput, TOutput>
     {
         private readonly ITargetBlock<TInput> _target;
         private readonly ISourceBlock<TOutput> _source;
@@ -205,7 +205,7 @@ namespace SimpleTplDataflowPipelines
                 tcs.SetException(
                     t.Exception.InnerExceptions.Where(ex => !(ex is PipelineException)));
                 return tcs.Task;
-            }, default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default).Unwrap();
+            }, default(CancellationToken), TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default).Unwrap();
         }
 
         internal static LinkDelegate CreateLinkDelegate<TOutput>(IDataflowBlock block,
@@ -236,7 +236,7 @@ namespace SimpleTplDataflowPipelines
                 // Discard the output of the block, if it's actually a source block.
                 // The last block in the pipeline may not be a source block.
                 if (blockAsSource != null)
-                    _ = blockAsSource.LinkTo(
+                    blockAsSource.LinkTo(
                         DataflowBlock.NullTarget<TOutput>(), _nullTargetLinkOptions);
             });
 
@@ -259,16 +259,16 @@ namespace SimpleTplDataflowPipelines
                     // Storing the IDisposable returned by the LinkTo, and disposing it after
                     // the completion of the block, would serve no purpose. All links are
                     // released automatically anyway when a block completes.
-                    _ = blockAsSource.LinkTo(target);
+                    blockAsSource.LinkTo(target);
                 }
 
-                _ = block.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(() =>
+                block.Completion.ContinueWith(t => OnErrorThrowOnThreadPool(() =>
                 {
                     if (t.IsFaulted)
                         onError(); // Signal that the pipeline has failed
                     else if (target != null)
                         target.Complete(); // Propagate the completion to the target
-                }), default, TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
+                }), default(CancellationToken), TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
             };
         }
 
@@ -360,16 +360,16 @@ namespace SimpleTplDataflowPipelines
 
         public bool TryReceive(Predicate<TOutput> filter, out TOutput item)
         {
-            if (_source is IReceivableSourceBlock<TOutput> receivable)
-                return receivable.TryReceive(filter, out item);
+            var receivable = _source as IReceivableSourceBlock<TOutput>;
+            if (receivable != null) return receivable.TryReceive(filter, out item);
             item = default(TOutput);
             return false;
         }
 
         public bool TryReceiveAll(out IList<TOutput> items)
         {
-            if (_source is IReceivableSourceBlock<TOutput> receivable)
-                return receivable.TryReceiveAll(out items);
+            var receivable = _source as IReceivableSourceBlock<TOutput>;
+            if (receivable != null) return receivable.TryReceiveAll(out items);
             items = null;
             return false;
         }

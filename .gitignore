@@ -341,7 +341,6 @@ healthchecksdb
 
 apps/
 _VARIOUS/
-_Notes.txt
 .editorconfig
 SimpleTplDataflowPipelines.Local.sln
 tests/SimpleTplDataflowPipelines.Tests.Framework/

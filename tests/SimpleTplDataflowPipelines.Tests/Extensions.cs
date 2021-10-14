@@ -14,8 +14,9 @@ namespace SimpleTplDataflowPipelines.Tests
             this IReceivableSourceBlock<T> block)
         {
             var list = new List<T>();
+            T item;
             while (await block.OutputAvailableAsync().ConfigureAwait(false))
-                while (block.TryReceive(out var item))
+                while (block.TryReceive(out item))
                     list.Add(item);
             await block.Completion.ConfigureAwait(false);
             return list;
@@ -37,7 +38,7 @@ namespace SimpleTplDataflowPipelines.Tests
                     if (task.IsCompleted) return task;
                     if (continuation.IsCanceled) throw new TimeoutException();
                     return task;
-                }, default, TaskContinuationOptions.ExecuteSynchronously,
+                }, default(CancellationToken), TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default).Unwrap();
         }
 
