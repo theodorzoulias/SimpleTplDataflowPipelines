@@ -343,4 +343,5 @@ apps/
 _VARIOUS/
 .editorconfig
 SimpleTplDataflowPipelines.Local.sln
+logo_square.png
 tests/SimpleTplDataflowPipelines.Tests.Framework/
