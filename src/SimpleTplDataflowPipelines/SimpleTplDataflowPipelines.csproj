@@ -7,7 +7,7 @@
     <Version>1.0.6</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageIcon>logo_square.png</PackageIcon>
+    <PackageIcon>logo_32.png</PackageIcon>
     <PackageProjectUrl>https://github.com/theodorzoulias/SimpleTplDataflowPipelines</PackageProjectUrl>
     <PackageTags>tpldataflow;dataflow;pipeline</PackageTags>
     <PackageReleaseNotes>GenerateDocumentationFile</PackageReleaseNotes>
@@ -22,7 +22,7 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
-    <None Include="..\..\logo_square.png">
+    <None Include="..\..\logo_32.png">
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
