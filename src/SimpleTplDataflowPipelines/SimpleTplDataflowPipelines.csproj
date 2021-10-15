@@ -4,9 +4,9 @@
     <TargetFrameworks>netstandard2.0;net46</TargetFrameworks>
     <Authors>Theodor Zoulias</Authors>
     <Description>A library that helps at building simple TPL Dataflow pipelines</Description>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageIcon>logo.png</PackageIcon>
+    <PackageIcon>logo_square.png</PackageIcon>
     <PackageProjectUrl>https://github.com/theodorzoulias/SimpleTplDataflowPipelines</PackageProjectUrl>
     <PackageTags>tpldataflow;dataflow;pipeline</PackageTags>
   </PropertyGroup>
@@ -20,7 +20,7 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
-    <None Include="..\..\logo.png">
+    <None Include="..\..\logo_square.png">
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
