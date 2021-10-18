@@ -3,6 +3,8 @@
 # Simple TPL Dataflow Pipelines
 
 [![Nuget](https://img.shields.io/nuget/v/SimpleTplDataflowPipelines)](https://www.nuget.org/packages/SimpleTplDataflowPipelines/)
+[![netstandard 1.3](https://img.shields.io/badge/netstandard-1.3-brightgreen.svg)](https://docs.microsoft.com/en-us/dotnet/standard/net-standard)
+[![netstandard 2.0](https://img.shields.io/badge/netstandard-2.0-brightgreen.svg)](https://docs.microsoft.com/en-us/dotnet/standard/net-standard)
 
 This library helps at building simple [TPL Dataflow](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/dataflow-task-parallel-library) pipelines,
 that enforce the following guarantees:
@@ -134,7 +136,7 @@ You can install the [SimpleTplDataflowPipelines](https://www.nuget.org/packages/
 You can also [download](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/releases) the project and build it locally, or just
 embed the single code file [`PipelineBuilder.cs`](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/blob/main/src/SimpleTplDataflowPipelines/PipelineBuilder.cs)
 (~400 lines of code) into your project.
-This library has been tested on the .NET Core 3.0, .NET 5 and .NET Framework 4.6 platforms.
+This library has been tested on the .NET 5 and the .NET Framework 4.6 platforms.
 
 ## Performance
 
