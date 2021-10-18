@@ -40,8 +40,9 @@ namespace SimpleTplDataflowPipelines
     /// <summary>
     /// Represents an error that occurred in an other dataflow block, owned by the same pipeline.
     /// </summary>
-    public class PipelineException : Exception
+    public sealed class PipelineException : Exception
     {
+        // Prevent this type from being publicly creatable.
         internal PipelineException() : base("An other dataflow block, owned by the same pipeline, failed.") { }
     }
 
@@ -201,9 +202,15 @@ namespace SimpleTplDataflowPipelines
             return Task.WhenAll(completions).ContinueWith(t =>
             {
                 if (!t.IsFaulted) return t;
+
+                // Propagate all non-PipelineException errors.
+                // At least one should exist, unless reflection was used.
+                var filtered = t.Exception.InnerExceptions
+                    .Where(ex => !(ex is PipelineException));
+                if (!filtered.Any()) throw new InvalidOperationException(
+                    "After filtering out the PipelineExceptions, no other exception was left.");
                 var tcs = new TaskCompletionSource<object>();
-                tcs.SetException(
-                    t.Exception.InnerExceptions.Where(ex => !(ex is PipelineException)));
+                tcs.SetException(filtered);
                 return tcs.Task;
             }, default(CancellationToken), TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default).Unwrap();
         }
@@ -301,7 +308,7 @@ namespace SimpleTplDataflowPipelines
         }
     }
 
-    internal class Pipeline<TInput> : ITargetBlock<TInput>
+    internal sealed class Pipeline<TInput> : ITargetBlock<TInput>
     {
         private readonly ITargetBlock<TInput> _target;
         private readonly Task _completion;
@@ -323,7 +330,7 @@ namespace SimpleTplDataflowPipelines
                 => _target.OfferMessage(messageHeader, messageValue, source, consumeToAccept);
     }
 
-    internal class Pipeline<TInput, TOutput> : IPropagatorBlock<TInput, TOutput>,
+    internal sealed class Pipeline<TInput, TOutput> : IPropagatorBlock<TInput, TOutput>,
         IReceivableSourceBlock<TOutput>
     {
         private readonly ITargetBlock<TInput> _target;

@@ -2,6 +2,8 @@
 
 # Simple TPL Dataflow Pipelines
 
+[![Nuget](https://img.shields.io/nuget/v/SimpleTplDataflowPipelines)](https://www.nuget.org/packages/SimpleTplDataflowPipelines/)
+
 This library helps at building simple [TPL Dataflow](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/dataflow-task-parallel-library) pipelines,
 that enforce the following guarantees:
 
@@ -100,7 +102,7 @@ the `Completion` property of the individual blocks. Observing this exception jus
 this block was not the first that failed. It is possible that the `PipelineException`
 may coexist with other exceptions in the same dataflow block.
 
-## Discussion
+## Comparison with Encapsulate
 
 It might be helpful to compare the functionality offered by this library with the
 functionality offered by the [`DataflowBlock.Encapsulate`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.encapsulate) method.
@@ -108,7 +110,7 @@ The result of this method is similar with the result of the `ToPipeline` method:
 an [`IPropagatorBlock<TInput, TOutput>`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.ipropagatorblock-2) implementation
 (a block that is both a target and a source). The `DataflowBlock.Encapsulate`
 accepts a `target` and a `source` block, and returns a propagator that delegates to
-these two blocks. The two blocks are not linked automatically in any way, and the completion
+these two blocks. The two blocks are **not** linked automatically in any way, and the completion
 of the propagator represents the completion of the second (the `source`) block only.
 On the contrary the `ToPipeline` returns a propagator that links all the dataflow
 blocks tightly in both directions, and its `Completion` represents the completion of all its
@@ -129,7 +131,6 @@ bool received = receivable.TryReceive(out string item);
 ## Embedding the library into your project
 
 You can install the [SimpleTplDataflowPipelines](https://www.nuget.org/packages/SimpleTplDataflowPipelines/) NuGet package.
-[![Nuget](https://img.shields.io/nuget/v/SimpleTplDataflowPipelines)](https://www.nuget.org/packages/SimpleTplDataflowPipelines/)
 You can also [download](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/releases) the project and build it locally, or just
 embed the single code file [`PipelineBuilder.cs`](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/blob/main/src/SimpleTplDataflowPipelines/PipelineBuilder.cs)
 (~400 lines of code) into your project.

@@ -4,7 +4,7 @@
     <TargetFrameworks>netstandard2.0;net46</TargetFrameworks>
     <Authors>Theodor Zoulias</Authors>
     <Description>A library that helps at building simple TPL Dataflow pipelines</Description>
-    <Version>1.0.7</Version>
+    <Version>1.1.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageIcon>logo_32.png</PackageIcon>
