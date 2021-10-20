@@ -187,8 +187,7 @@ namespace SimpleTplDataflowPipelines
             IPropagatorBlock<TOutput, TNewOutput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var source = _source;
-            var newNode = new LinkNode<TOutput>(source, source, block);
+            var newNode = new LinkNode<TOutput>(_source, _source, block);
             var newNodes = PipelineCommon.Append(_nodes, newNode);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, newNodes);
         }
@@ -203,10 +202,79 @@ namespace SimpleTplDataflowPipelines
         public PipelineBuilder<TInput> LinkTo(ITargetBlock<TOutput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var source = _source;
-            var newNode = new LinkNode<TOutput>(source, source, block);
+            var newNode = new LinkNode<TOutput>(_source, _source, block);
             var newNodes = PipelineCommon.Append(_nodes, newNode);
             return new PipelineBuilder<TInput>(_target, block, newNodes);
+        }
+
+        /// <summary>
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a new propagator block that is not linked to the
+        /// previous block, specifying whether the completion of the previous block
+        /// will be propagated to the new block.
+        /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
+        public PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
+            IPropagatorBlock<TNewInput, TNewOutput> block, bool propagateCompletion)
+        {
+            if (block == null) throw new ArgumentNullException(nameof(block));
+            var newNode = new LinkNode<TNewInput>(_source, null, propagateCompletion ? block : null);
+            var newNodes = PipelineCommon.Append(_nodes, newNode);
+            return new PipelineBuilder<TInput, TNewOutput>(_target, block, newNodes);
+        }
+
+        /// <summary>
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a new target block that is not linked to the
+        /// previous block, specifying whether the completion of the previous block
+        /// will be propagated to the new block.
+        /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
+        public PipelineBuilder<TInput> AddUnlinked<TNewInput>(
+            ITargetBlock<TNewInput> block, bool propagateCompletion)
+        {
+            if (block == null) throw new ArgumentNullException(nameof(block));
+            var newNode = new LinkNode<TNewInput>(_source, null, propagateCompletion ? block : null);
+            var newNodes = PipelineCommon.Append(_nodes, newNode);
+            return new PipelineBuilder<TInput>(_target, block, newNodes);
+        }
+
+        /// <summary>
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for an asynchronous action that will be invoked when
+        /// the last block completes.
+        /// The completion of the action is propagated to the next block.
+        /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
+        public PipelineBuilder<TInput, TOutput> WithPostCompletionAction(Func<Task, Task> action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var newNode = new ActionNode(action);
+            var newNodes = PipelineCommon.Append(_nodes, newNode);
+            return new PipelineBuilder<TInput, TOutput>(_target, _source, newNodes);
+        }
+
+        /// <summary>
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a synchronous action that will be invoked when
+        /// the last block completes.
+        /// The completion of the action is propagated to the next block.
+        /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
+        public PipelineBuilder<TInput, TOutput> WithPostCompletionAction(Action<Task> action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var newNode = new ActionNode(t => { action(t); return Task.CompletedTask; });
+            var newNodes = PipelineCommon.Append(_nodes, newNode);
+            return new PipelineBuilder<TInput, TOutput>(_target, _source, newNodes);
         }
 
         /// <summary>
