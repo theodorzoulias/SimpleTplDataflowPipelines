@@ -34,9 +34,6 @@ namespace SimpleTplDataflowPipelines
         }
     }
 
-    //internal delegate Func<Task, Task> Node(
-    //    List<Task> completions, List<Action> failureActions, Action onError);
-
     /// <summary>
     /// Represents an error that occurred in an other dataflow block, owned by the same pipeline.
     /// </summary>
@@ -66,8 +63,14 @@ namespace SimpleTplDataflowPipelines
         }
 
         /// <summary>
-        /// TODO
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a new propagator block that is not linked to the
+        /// previous block, specifying whether the completion of the previous block
+        /// will be propagated to the new block.
         /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
         public PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
             IPropagatorBlock<TNewInput, TNewOutput> block, bool propagateCompletion)
         {
@@ -78,8 +81,32 @@ namespace SimpleTplDataflowPipelines
         }
 
         /// <summary>
-        /// TODO
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a new target block that is not linked to the
+        /// previous block, specifying whether the completion of the previous block
+        /// will be propagated to the new block.
         /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
+        public PipelineBuilder<TInput> AddUnlinked<TNewInput>(
+            ITargetBlock<TNewInput> block, bool propagateCompletion)
+        {
+            if (block == null) throw new ArgumentNullException(nameof(block));
+            var newNode = new LinkNode<TNewInput>(_lastBlock, null, propagateCompletion ? block : null);
+            var newNodes = PipelineCommon.Append(_nodes, newNode);
+            return new PipelineBuilder<TInput>(_target, block, newNodes);
+        }
+
+        /// <summary>
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for an asynchronous action that will be invoked when
+        /// the last block completes.
+        /// The completion of the action is propagated to the next block.
+        /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
         public PipelineBuilder<TInput> WithPostCompletionAction(Func<Task, Task> action)
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
@@ -89,8 +116,14 @@ namespace SimpleTplDataflowPipelines
         }
 
         /// <summary>
-        /// TODO
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a synchronous action that will be invoked when
+        /// the last block completes.
+        /// The completion of the action is propagated to the next block.
         /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
         public PipelineBuilder<TInput> WithPostCompletionAction(Action<Task> action)
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
@@ -146,8 +179,10 @@ namespace SimpleTplDataflowPipelines
         /// <summary>
         /// Creates a new builder that holds all the metadata of the current builder,
         /// plus the metadata for the new propagator block.
-        /// The current builder is not changed.
         /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
         public PipelineBuilder<TInput, TNewOutput> LinkTo<TNewOutput>(
             IPropagatorBlock<TOutput, TNewOutput> block)
         {
@@ -161,8 +196,10 @@ namespace SimpleTplDataflowPipelines
         /// <summary>
         /// Creates a new builder that holds all the metadata of the current builder,
         /// plus the metadata for the new target block.
-        /// The current builder is not changed.
         /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
         public PipelineBuilder<TInput> LinkTo(ITargetBlock<TOutput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
@@ -225,7 +262,6 @@ namespace SimpleTplDataflowPipelines
         public override void Run(List<Task> completions,
             Task lastCompletion, out Task nextCompletion, Action onError)
         {
-            Console.WriteLine($"@Run #{_block.Completion.GetHashCode()}");
             completions.Add(_block.Completion);
 
             if (_blockAsSource != null && _target != null)
@@ -244,9 +280,8 @@ namespace SimpleTplDataflowPipelines
             // It's extremely unlikely that any of these continuations will ever fail since,
             // according to the documentation, the invoked APIs (Complete, LinkTo, NullTarget)
             // do not throw exceptions.
-            lastCompletion.ContinueWith(t => PipelineCommon.OnErrorThrowOnThreadPool(() =>
+            (lastCompletion ?? _block.Completion).ContinueWith(t => PipelineCommon.OnErrorThrowOnThreadPool(() =>
             {
-                Console.WriteLine($"@ContinueWith #{t.GetHashCode()} {t.Status}");
                 if (t.IsFaulted)
                     onError(); // Signal that the pipeline has failed
                 else if (_target != null)
@@ -298,22 +333,19 @@ namespace SimpleTplDataflowPipelines
             var errorTcs = new TaskCompletionSource<object>();
             Action onError = () => errorTcs.TrySetResult(null);
 
-            Task lastCompletion = target.Completion;
+            Task lastCompletion = null;
             var completions = new List<Task>();
             foreach (var node in nodes)
             {
                 node.Run(completions, lastCompletion, out var completion, onError);
                 lastCompletion = completion;
             }
-            //foreach (var completion in completions)
-            //    Console.WriteLine($"@CreatePipeline, completion: #{completion.GetHashCode()} {completion.Status}");
 
-            // The onError delegate must not be invoked before all nodes have Run,
-            // and must be invoked only once.
-            // Hence the TaskCompletionSource.TrySetResult + Task.ContinueWith approach.
+            // The onError delegate should not be invoked before all nodes have Run,
+            // and should be invoked only once. Hence the need for the
+            // TaskCompletionSource.TrySetResult + Task.ContinueWith complexity.
             errorTcs.Task.ContinueWith(_ => PipelineCommon.OnErrorThrowOnThreadPool(() =>
             {
-                Console.WriteLine($"@errorTcs.Task.ContinueWith");
                 foreach (var node in nodes) node.Fault();
             }), default(CancellationToken), TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
