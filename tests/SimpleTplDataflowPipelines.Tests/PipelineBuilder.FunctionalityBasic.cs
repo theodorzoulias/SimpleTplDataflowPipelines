@@ -10,7 +10,6 @@ using System.Threading.Tasks.Dataflow;
 
 namespace SimpleTplDataflowPipelines.Tests
 {
-    [TestClass]
     public partial class PipelineBuilderTests
     {
         [TestMethod]

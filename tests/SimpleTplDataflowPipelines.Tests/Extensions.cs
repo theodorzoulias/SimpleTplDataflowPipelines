@@ -11,12 +11,13 @@ namespace SimpleTplDataflowPipelines.Tests
     {
         // https://stackoverflow.com/questions/49389273/for-a-tpl-dataflow-how-do-i-get-my-hands-on-all-the-output-produced-by-a-transf/62410007#62410007
         public static async Task<List<T>> ToListAsync<T>(this IReceivableSourceBlock<T> block,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             var list = new List<T>();
             while (await block.OutputAvailableAsync(cancellationToken).ConfigureAwait(false))
             {
-                while (block.TryReceive(out var item))
+                T item;
+                while (block.TryReceive(out item))
                 {
                     list.Add(item);
                 }

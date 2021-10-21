@@ -67,7 +67,7 @@ namespace SimpleTplDataflowPipelines
             ITargetBlock<TNewInput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TNewInput>(_lastBlock, null, propagateCompletion ? block : null);
+            var newNode = new LinkNode<TNewInput>(_lastBlock, null, block, propagateCompletion);
             return new PipelineBuilder<TInput>(_target, block, _nodes, newNode);
         }
 
@@ -84,7 +84,7 @@ namespace SimpleTplDataflowPipelines
             IPropagatorBlock<TNewInput, TNewOutput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TNewInput>(_lastBlock, null, propagateCompletion ? block : null);
+            var newNode = new LinkNode<TNewInput>(_lastBlock, null, block, propagateCompletion);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, _nodes, newNode);
         }
 
@@ -138,7 +138,7 @@ namespace SimpleTplDataflowPipelines
             if (_target == null) throw new InvalidOperationException();
             Debug.Assert(_lastBlock != null);
             // Add a dummy final node so that there is one node for each block
-            var newNode = new LinkNode<object>(_lastBlock, null, null);
+            var newNode = new LinkNode<object>(_lastBlock, null, null, false);
             var newNodes = PipelineCommon.Append(_nodes, newNode);
             var completion = PipelineCommon.CreatePipeline(_target, newNodes);
             return new Pipeline<TInput>(_target, completion);
@@ -175,7 +175,7 @@ namespace SimpleTplDataflowPipelines
         public PipelineBuilder<TInput> LinkTo(ITargetBlock<TOutput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TOutput>(_source, _source, block);
+            var newNode = new LinkNode<TOutput>(_source, _source, block, true);
             return new PipelineBuilder<TInput>(_target, block, _nodes, newNode);
         }
 
@@ -190,7 +190,7 @@ namespace SimpleTplDataflowPipelines
             IPropagatorBlock<TOutput, TNewOutput> block)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TOutput>(_source, _source, block);
+            var newNode = new LinkNode<TOutput>(_source, _source, block, true);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, _nodes, newNode);
         }
 
@@ -207,7 +207,7 @@ namespace SimpleTplDataflowPipelines
             ITargetBlock<TNewInput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TNewInput>(_source, null, propagateCompletion ? block : null);
+            var newNode = new LinkNode<TNewInput>(_source, null, block, propagateCompletion);
             return new PipelineBuilder<TInput>(_target, block, _nodes, newNode);
         }
 
@@ -224,7 +224,7 @@ namespace SimpleTplDataflowPipelines
             IPropagatorBlock<TNewInput, TNewOutput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TNewInput>(_source, null, propagateCompletion ? block : null);
+            var newNode = new LinkNode<TNewInput>(_source, null, block, propagateCompletion);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, _nodes, newNode);
         }
 
@@ -278,7 +278,7 @@ namespace SimpleTplDataflowPipelines
             if (_target == null) throw new InvalidOperationException();
             Debug.Assert(_source != null);
             // Add a dummy final node so that there is one node for each block
-            var newNode = new LinkNode<TOutput>(_source, _source, null);
+            var newNode = new LinkNode<TOutput>(_source, _source, null, false);
             var newNodes = PipelineCommon.Append(_nodes, newNode);
             var completion = PipelineCommon.CreatePipeline(_target, newNodes);
             return new Pipeline<TInput, TOutput>(_target, _source, completion);
@@ -309,19 +309,25 @@ namespace SimpleTplDataflowPipelines
         private readonly IDataflowBlock _block;
         private readonly ISourceBlock<TOutput> _blockAsSource;
         private readonly ITargetBlock<TOutput> _target;
+        private readonly bool _propagateCompletion;
 
         public LinkNode(IDataflowBlock block, ISourceBlock<TOutput> blockAsSource,
-            ITargetBlock<TOutput> target)
+            ITargetBlock<TOutput> target, bool propagateCompletion)
         {
             Debug.Assert(block != null);
             _block = block;
             _blockAsSource = blockAsSource;
             _target = target;
+            _propagateCompletion = propagateCompletion;
         }
 
         public override void Run(List<Task> completions,
             Task lastCompletion, out Task nextCompletion, Action onError)
         {
+            Debug.Assert(completions != null);
+            Debug.Assert(lastCompletion != null);
+            Debug.Assert(onError != null);
+
             completions.Add(_block.Completion);
 
             if (_blockAsSource != null && _target != null)
@@ -340,11 +346,11 @@ namespace SimpleTplDataflowPipelines
             // It's extremely unlikely that any of these continuations will ever fail since,
             // according to the documentation, the invoked APIs (Complete, LinkTo, NullTarget)
             // do not throw exceptions.
-            (lastCompletion ?? _block.Completion).ContinueWith(t => PipelineCommon.OnErrorThrowOnThreadPool(() =>
+            lastCompletion.ContinueWith(t => PipelineCommon.OnErrorThrowOnThreadPool(() =>
             {
                 if (t.IsFaulted)
                     onError(); // Signal that the pipeline has failed
-                else if (_target != null)
+                else if (_target != null && _propagateCompletion)
                     _target.Complete(); // Propagate the completion to the target
             }), default(CancellationToken), TaskContinuationOptions.DenyChildAttach, TaskScheduler.Default);
             nextCompletion = _target?.Completion;
@@ -393,13 +399,14 @@ namespace SimpleTplDataflowPipelines
             var errorTcs = new TaskCompletionSource<object>();
             Action onError = () => errorTcs.TrySetResult(null);
 
-            Task lastCompletion = null;
+            Task lastCompletion = target.Completion;
             var completions = new List<Task>();
             foreach (var node in nodes)
             {
                 node.Run(completions, lastCompletion, out var completion, onError);
                 lastCompletion = completion;
             }
+            Debug.Assert(lastCompletion == null); // The last dummy node has no target
 
             // The onError delegate should not be invoked before all nodes have Run,
             // and should be invoked only once. Hence the need for the
