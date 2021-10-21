@@ -34,11 +34,11 @@ namespace SimpleTplDataflowPipelines.Tests
 
             Assert.ThrowsException<ArgumentNullException>(() =>
             {
-                builder_1.AddUnlinked((ITargetBlock<int>)null, true);
+                builder_1.AddUnlinked((ITargetBlock<int>)null);
             });
             Assert.ThrowsException<ArgumentNullException>(() =>
             {
-                builder_1.AddUnlinked((IPropagatorBlock<int, int>)null, true);
+                builder_1.AddUnlinked((IPropagatorBlock<int, int>)null);
             });
 
             Assert.ThrowsException<ArgumentNullException>(() =>
@@ -67,11 +67,11 @@ namespace SimpleTplDataflowPipelines.Tests
 
             Assert.ThrowsException<ArgumentNullException>(() =>
             {
-                builder_2.AddUnlinked((ITargetBlock<int>)null, true);
+                builder_2.AddUnlinked((ITargetBlock<int>)null);
             });
             Assert.ThrowsException<ArgumentNullException>(() =>
             {
-                builder_2.AddUnlinked((IPropagatorBlock<int, int>)null, true);
+                builder_2.AddUnlinked((IPropagatorBlock<int, int>)null);
             });
 
             Assert.ThrowsException<ArgumentNullException>(() =>
@@ -85,7 +85,7 @@ namespace SimpleTplDataflowPipelines.Tests
         }
 
         [TestMethod]
-        public void ArgumentsValidation_EmptyBuilders()
+        public void ArgumentsValidation_EmptyBuilder()
         {
             Assert.ThrowsException<InvalidOperationException>(() =>
             {

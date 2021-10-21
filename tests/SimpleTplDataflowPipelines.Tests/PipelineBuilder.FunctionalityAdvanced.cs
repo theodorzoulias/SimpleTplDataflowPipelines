@@ -15,15 +15,17 @@ namespace SimpleTplDataflowPipelines.Tests
         [TestMethod]
         public async Task PostCompletionAction()
         {
-            long[] timestamps = new long[6];
+            long[] timestamps = new long[5];
 
             var pipeline = PipelineBuilder
                 .BeginWith(new TransformBlock<int, long>(_ => timestamps[0] = Stopwatch.GetTimestamp()))
                 .WithPostCompletionAction(_ => timestamps[1] = Stopwatch.GetTimestamp())
-                .LinkTo(new TransformBlock<long, long>(_ => timestamps[2] = Stopwatch.GetTimestamp()))
+                .LinkTo(new TransformBlock<long, long>(x => x))
+                .WithPostCompletionAction(_ => timestamps[2] = Stopwatch.GetTimestamp())
+                .LinkTo(new ActionBlock<long>(_ => { }))
                 .WithPostCompletionAction(_ => timestamps[3] = Stopwatch.GetTimestamp())
-                .LinkTo(new ActionBlock<long>(_ => timestamps[4] = Stopwatch.GetTimestamp()))
-                .WithPostCompletionAction(_ => timestamps[5] = Stopwatch.GetTimestamp())
+                .AddUnlinked(new TransformBlock<long, long>(x => x))
+                .WithPostCompletionAction(_ => timestamps[4] = Stopwatch.GetTimestamp())
                 .ToPipeline();
 
             pipeline.Post(0);

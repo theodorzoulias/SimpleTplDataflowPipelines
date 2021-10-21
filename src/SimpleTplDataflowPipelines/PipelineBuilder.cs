@@ -54,16 +54,8 @@ namespace SimpleTplDataflowPipelines
                 PipelineCommon.Append(previousNodes, newNode) : previousNodes;
         }
 
-        /// <summary>
-        /// Creates a new builder that holds all the metadata of the current builder,
-        /// plus the metadata for a new target block that is not linked to the
-        /// previous block, specifying whether the completion of the previous block
-        /// will be propagated to the new block.
-        /// </summary>
-        /// <remarks>
-        /// The current builder is not changed.
-        /// </remarks>
-        public PipelineBuilder<TInput> AddUnlinked<TNewInput>(
+        // Not sure if the propagateCompletion functionality is useful
+        private PipelineBuilder<TInput> AddUnlinked<TNewInput>(
             ITargetBlock<TNewInput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
@@ -73,19 +65,39 @@ namespace SimpleTplDataflowPipelines
 
         /// <summary>
         /// Creates a new builder that holds all the metadata of the current builder,
-        /// plus the metadata for a new propagator block that is not linked to the
-        /// previous block, specifying whether the completion of the previous block
-        /// will be propagated to the new block.
+        /// plus the metadata for a new target block that is not linked to the
+        /// previous block.
         /// </summary>
         /// <remarks>
         /// The current builder is not changed.
         /// </remarks>
-        public PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
+        public PipelineBuilder<TInput> AddUnlinked<TNewInput>(
+            ITargetBlock<TNewInput> block)
+        {
+            return AddUnlinked(block, true);
+        }
+
+        // Not sure if the propagateCompletion functionality is useful
+        private PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
             IPropagatorBlock<TNewInput, TNewOutput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
             var newNode = new LinkNode<TNewInput>(_lastBlock, null, block, propagateCompletion);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, _nodes, newNode);
+        }
+
+        /// <summary>
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a new propagator block that is not linked to the
+        /// previous block.
+        /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
+        public PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
+            IPropagatorBlock<TNewInput, TNewOutput> block)
+        {
+            return AddUnlinked(block, true);
         }
 
         /// <summary>
@@ -137,7 +149,7 @@ namespace SimpleTplDataflowPipelines
         {
             if (_target == null) throw new InvalidOperationException();
             Debug.Assert(_lastBlock != null);
-            // Add a dummy final node so that there is one node for each block
+            // Add a final node so that there is one node for each block
             var newNode = new LinkNode<object>(_lastBlock, null, null, false);
             var newNodes = PipelineCommon.Append(_nodes, newNode);
             var completion = PipelineCommon.CreatePipeline(_target, newNodes);
@@ -165,6 +177,15 @@ namespace SimpleTplDataflowPipelines
                 PipelineCommon.Append(previousNodes, newNode) : previousNodes;
         }
 
+        // Not sure if the propagateCompletion functionality is useful
+        private PipelineBuilder<TInput> LinkTo(ITargetBlock<TOutput> block,
+            bool propagateCompletion)
+        {
+            if (block == null) throw new ArgumentNullException(nameof(block));
+            var newNode = new LinkNode<TOutput>(_source, _source, block, propagateCompletion);
+            return new PipelineBuilder<TInput>(_target, block, _nodes, newNode);
+        }
+
         /// <summary>
         /// Creates a new builder that holds all the metadata of the current builder,
         /// plus the metadata for the new target block.
@@ -174,9 +195,16 @@ namespace SimpleTplDataflowPipelines
         /// </remarks>
         public PipelineBuilder<TInput> LinkTo(ITargetBlock<TOutput> block)
         {
+            return LinkTo(block, true);
+        }
+
+        // Not sure if the propagateCompletion functionality is useful
+        private PipelineBuilder<TInput, TNewOutput> LinkTo<TNewOutput>(
+            IPropagatorBlock<TOutput, TNewOutput> block, bool propagateCompletion)
+        {
             if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TOutput>(_source, _source, block, true);
-            return new PipelineBuilder<TInput>(_target, block, _nodes, newNode);
+            var newNode = new LinkNode<TOutput>(_source, _source, block, propagateCompletion);
+            return new PipelineBuilder<TInput, TNewOutput>(_target, block, _nodes, newNode);
         }
 
         /// <summary>
@@ -189,21 +217,11 @@ namespace SimpleTplDataflowPipelines
         public PipelineBuilder<TInput, TNewOutput> LinkTo<TNewOutput>(
             IPropagatorBlock<TOutput, TNewOutput> block)
         {
-            if (block == null) throw new ArgumentNullException(nameof(block));
-            var newNode = new LinkNode<TOutput>(_source, _source, block, true);
-            return new PipelineBuilder<TInput, TNewOutput>(_target, block, _nodes, newNode);
+            return LinkTo(block, true);
         }
 
-        /// <summary>
-        /// Creates a new builder that holds all the metadata of the current builder,
-        /// plus the metadata for a new target block that is not linked to the
-        /// previous block, specifying whether the completion of the previous block
-        /// will be propagated to the new block.
-        /// </summary>
-        /// <remarks>
-        /// The current builder is not changed.
-        /// </remarks>
-        public PipelineBuilder<TInput> AddUnlinked<TNewInput>(
+        // Not sure if the propagateCompletion functionality is useful
+        private PipelineBuilder<TInput> AddUnlinked<TNewInput>(
             ITargetBlock<TNewInput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
@@ -213,19 +231,39 @@ namespace SimpleTplDataflowPipelines
 
         /// <summary>
         /// Creates a new builder that holds all the metadata of the current builder,
-        /// plus the metadata for a new propagator block that is not linked to the
-        /// previous block, specifying whether the completion of the previous block
-        /// will be propagated to the new block.
+        /// plus the metadata for a new target block that is not linked to the
+        /// previous block.
         /// </summary>
         /// <remarks>
         /// The current builder is not changed.
         /// </remarks>
-        public PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
+        public PipelineBuilder<TInput> AddUnlinked<TNewInput>(
+            ITargetBlock<TNewInput> block)
+        {
+            return AddUnlinked(block, true);
+        }
+
+        // Not sure if the propagateCompletion functionality is useful
+        private PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
             IPropagatorBlock<TNewInput, TNewOutput> block, bool propagateCompletion)
         {
             if (block == null) throw new ArgumentNullException(nameof(block));
             var newNode = new LinkNode<TNewInput>(_source, null, block, propagateCompletion);
             return new PipelineBuilder<TInput, TNewOutput>(_target, block, _nodes, newNode);
+        }
+
+        /// <summary>
+        /// Creates a new builder that holds all the metadata of the current builder,
+        /// plus the metadata for a new propagator block that is not linked to the
+        /// previous block.
+        /// </summary>
+        /// <remarks>
+        /// The current builder is not changed.
+        /// </remarks>
+        public PipelineBuilder<TInput, TNewOutput> AddUnlinked<TNewInput, TNewOutput>(
+            IPropagatorBlock<TNewInput, TNewOutput> block)
+        {
+            return AddUnlinked(block, true);
         }
 
         /// <summary>
@@ -277,7 +315,7 @@ namespace SimpleTplDataflowPipelines
         {
             if (_target == null) throw new InvalidOperationException();
             Debug.Assert(_source != null);
-            // Add a dummy final node so that there is one node for each block
+            // Add a final node so that there is one node for each block
             var newNode = new LinkNode<TOutput>(_source, _source, null, false);
             var newNodes = PipelineCommon.Append(_nodes, newNode);
             var completion = PipelineCommon.CreatePipeline(_target, newNodes);
@@ -381,6 +419,10 @@ namespace SimpleTplDataflowPipelines
         public override void Run(List<Task> completions,
             Task lastCompletion, out Task nextCompletion, Action onError)
         {
+            Debug.Assert(completions != null);
+            Debug.Assert(lastCompletion != null);
+            Debug.Assert(onError != null);
+
             nextCompletion = lastCompletion.ContinueWith(_action,
                 default(CancellationToken), TaskContinuationOptions.DenyChildAttach,
                 TaskScheduler.Default).Unwrap();
@@ -406,7 +448,7 @@ namespace SimpleTplDataflowPipelines
                 node.Run(completions, lastCompletion, out var completion, onError);
                 lastCompletion = completion;
             }
-            Debug.Assert(lastCompletion == null); // The last dummy node has no target
+            Debug.Assert(lastCompletion == null); // The final node has no target
 
             // The onError delegate should not be invoked before all nodes have Run,
             // and should be invoked only once. Hence the need for the
