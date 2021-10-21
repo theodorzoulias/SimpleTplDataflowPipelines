@@ -10,14 +10,17 @@ namespace SimpleTplDataflowPipelines.Tests
     internal static class DataflowBlockExtensions
     {
         // https://stackoverflow.com/questions/49389273/for-a-tpl-dataflow-how-do-i-get-my-hands-on-all-the-output-produced-by-a-transf/62410007#62410007
-        public static async Task<List<T>> ToListAsync<T>(
-            this IReceivableSourceBlock<T> block)
+        public static async Task<List<T>> ToListAsync<T>(this IReceivableSourceBlock<T> block,
+            CancellationToken cancellationToken = default)
         {
             var list = new List<T>();
-            T item;
-            while (await block.OutputAvailableAsync().ConfigureAwait(false))
-                while (block.TryReceive(out item))
+            while (await block.OutputAvailableAsync(cancellationToken).ConfigureAwait(false))
+            {
+                while (block.TryReceive(out var item))
+                {
                     list.Add(item);
+                }
+            }
             await block.Completion.ConfigureAwait(false);
             return list;
         }
@@ -26,9 +29,9 @@ namespace SimpleTplDataflowPipelines.Tests
     internal static class TaskExtensions
     {
         // https://stackoverflow.com/questions/4238345/asynchronously-wait-for-taskt-to-complete-with-timeout/11191070#11191070
-        public static Task WithTimeout(this Task task, TimeSpan timeout)
+        public static Task WithTimeout(this Task task, int timeoutMilliseconds)
         {
-            var cts = new CancellationTokenSource(timeout);
+            var cts = new CancellationTokenSource(timeoutMilliseconds);
             return task
                 .ContinueWith(_ => { }, cts.Token,
                     TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default)
@@ -36,7 +39,7 @@ namespace SimpleTplDataflowPipelines.Tests
                 {
                     cts.Dispose();
                     if (task.IsCompleted) return task;
-                    if (continuation.IsCanceled) throw new TimeoutException();
+                    if (continuation.IsCanceled) return Task.FromException(new TimeoutException());
                     return task;
                 }, default(CancellationToken), TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default).Unwrap();

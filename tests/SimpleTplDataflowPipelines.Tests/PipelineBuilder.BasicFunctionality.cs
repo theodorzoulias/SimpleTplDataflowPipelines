@@ -11,7 +11,7 @@ using System.Threading.Tasks.Dataflow;
 namespace SimpleTplDataflowPipelines.Tests
 {
     [TestClass]
-    public class PipelineBuilderTests
+    public partial class PipelineBuilderTests
     {
         [TestMethod]
         public async Task CreateTargetPipeline()
@@ -29,7 +29,7 @@ namespace SimpleTplDataflowPipelines.Tests
 
             pipeline.Post(0);
             pipeline.Complete();
-            await pipeline.Completion;
+            await pipeline.Completion.WithTimeout(1000);
             Assert.IsTrue(done);
         }
 
@@ -50,7 +50,7 @@ namespace SimpleTplDataflowPipelines.Tests
             pipeline.Post(42);
             pipeline.Complete();
             var receivable = (IReceivableSourceBlock<int>)pipeline;
-            var list = await receivable.ToListAsync();
+            var list = await receivable.ToListAsync(new CancellationTokenSource(1000).Token);
             Assert.IsTrue(list.SequenceEqual(new int[] { 13, 42 }));
         }
 
@@ -71,7 +71,7 @@ namespace SimpleTplDataflowPipelines.Tests
 
             pipeline.Post(0);
             pipeline.Complete();
-            await pipeline.Completion;
+            await pipeline.Completion.WithTimeout(1000);
             Assert.IsTrue(done);
         }
 
@@ -83,7 +83,7 @@ namespace SimpleTplDataflowPipelines.Tests
             var pipeline = PipelineBuilder.BeginWith(block).ToPipeline();
             pipeline.Post(0);
             pipeline.Complete();
-            await pipeline.Completion;
+            await pipeline.Completion.WithTimeout(1000);
             Assert.IsTrue(done);
         }
 
@@ -95,7 +95,7 @@ namespace SimpleTplDataflowPipelines.Tests
             pipeline.Post(13);
             pipeline.Complete();
             var receivable = (IReceivableSourceBlock<string>)pipeline;
-            var list = await receivable.ToListAsync();
+            var list = await receivable.ToListAsync(new CancellationTokenSource(1000).Token);
             Assert.IsTrue(list.SequenceEqual(new string[] { "OK" }));
         }
 
@@ -117,12 +117,12 @@ namespace SimpleTplDataflowPipelines.Tests
             {
                 foreach (var item in Enumerable.Range(1, 5))
                     if (!await pipeline.SendAsync(item)) break;
-            }).WithTimeout(TimeSpan.FromMilliseconds(500));
+            }).WithTimeout(500);
 
             pipeline.Complete();
 
             await Assert.ThrowsExceptionAsync<ApplicationException>(
-                async () => await block2.Completion);
+                async () => await block2.Completion.WithTimeout(1000));
             var aex = Assert.ThrowsException<AggregateException>(
                 () => pipeline.Completion.Wait(100));
             Assert.IsTrue(aex.InnerExceptions.Count == 2, aex.InnerExceptions.Count.ToString());
@@ -150,12 +150,12 @@ namespace SimpleTplDataflowPipelines.Tests
             {
                 foreach (var item in Enumerable.Range(1, blocks.Length + 5))
                     if (!await pipeline.SendAsync(item)) break;
-            }).WithTimeout(TimeSpan.FromMilliseconds(500));
+            }).WithTimeout(500);
 
             pipeline.Complete();
 
             await Assert.ThrowsExceptionAsync<ApplicationException>(
-                async () => await finalBlock.Completion);
+                async () => await finalBlock.Completion.WithTimeout(1000));
             var aex = Assert.ThrowsException<AggregateException>(
                 () => pipeline.Completion.Wait(100));
             Assert.IsTrue(aex.InnerExceptions.Count == 1, aex.InnerExceptions.Count.ToString());
@@ -190,7 +190,7 @@ namespace SimpleTplDataflowPipelines.Tests
             pipeline.Post(4);
             pipeline.Complete();
             var aex = Assert.ThrowsException<AggregateException>(
-                () => pipeline.Completion.Wait());
+                () => pipeline.Completion.WithTimeout(1000).Wait());
             Assert.IsTrue(aex.InnerExceptions.Count == 4, String.Join(", ", aex.InnerExceptions.Select(ex => ex.Message)));
             Assert.IsTrue(aex.InnerExceptions.All(ex => ex is ApplicationException));
             Assert.IsTrue(aex.InnerExceptions.Select(ex => ex.Message).OrderBy(x => x).SequenceEqual(new[] { "1", "2", "3", "4" }));
@@ -242,7 +242,7 @@ namespace SimpleTplDataflowPipelines.Tests
             var source = Enumerable.Range(1, 1000);
             foreach (var item in source) pipeline.Post(item);
             pipeline.Complete();
-            var list = await ((IReceivableSourceBlock<int>)pipeline).ToListAsync();
+            var list = await ((IReceivableSourceBlock<int>)pipeline).ToListAsync(new CancellationTokenSource(1000).Token);
             Assert.IsTrue(list.SequenceEqual(source));
         }
 
@@ -263,7 +263,7 @@ namespace SimpleTplDataflowPipelines.Tests
             pipeline.Complete();
 
             var aex = Assert.ThrowsException<AggregateException>(
-                () => pipeline.Completion.Wait());
+                () => pipeline.Completion.WithTimeout(1000).Wait());
             Assert.IsTrue(aex.InnerExceptions.All(ex => ex is ApplicationException));
             Console.WriteLine($"({aex.InnerExceptions.Count}) {String.Join(", ", aex.InnerExceptions.Select(ex => ex.Message))}");
         }
@@ -296,7 +296,7 @@ namespace SimpleTplDataflowPipelines.Tests
             pipeline.Complete();
 
             var ex = await Assert.ThrowsExceptionAsync<TaskCanceledException>(
-                async () => await pipeline.Completion);
+                async () => await pipeline.Completion.WithTimeout(1000));
             Assert.IsTrue(ex.CancellationToken != cts.Token); // TPL Dataflow doesn't preserve the token
             Assert.IsTrue(pipeline.Completion.IsCanceled);
             Console.WriteLine($"Count: {count}");
@@ -323,7 +323,7 @@ namespace SimpleTplDataflowPipelines.Tests
             pipeline.Post(0);
             pipeline.Complete();
             var aex = Assert.ThrowsException<AggregateException>(
-                () => pipeline.Completion.Wait());
+                () => pipeline.Completion.WithTimeout(1000).Wait());
             Assert.IsTrue(aex.InnerExceptions.Count == 1);
             Assert.IsTrue(aex.InnerException is ApplicationException);
             Assert.IsTrue(!done);
@@ -347,28 +347,5 @@ namespace SimpleTplDataflowPipelines.Tests
             Assert.IsTrue(aex.InnerExceptions.Count == 1);
             Assert.IsTrue(aex.InnerException is ApplicationException);
         }
-
-        /*
-        [TestMethod]
-        public async Task Example()
-        {
-            var block1 = new TransformManyBlock<string, string>(
-                folderPath => Directory.EnumerateFiles(folderPath));
-            var block2 = new TransformBlock<string, (string, int)>(
-                filePath => (filePath, File.ReadLines(filePath).Count()));
-            var block3 = new ActionBlock<(string, int)>(
-                e => Console.WriteLine($"{Path.GetFileName(e.Item1)} has {e.Item2} lines"));
-
-            var pipeline = PipelineBuilder // This pipeline is a ITargetBlock<string>
-                .BeginWith(block1)
-                .LinkTo(block2)
-                .LinkTo(block3)
-                .ToPipeline();
-
-            pipeline.Post(@"C:\Users\Public\Documents");
-            pipeline.Complete();
-            await pipeline.Completion;
-        }
-        */
     }
 }
