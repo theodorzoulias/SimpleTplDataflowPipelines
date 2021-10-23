@@ -122,7 +122,8 @@ It should be noted that the `IPropagatorBlock<TInput, TOutput>` returned by both
 these approaches also implements the [`IReceivableSourceBlock<TOutput>`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.ireceivablesourceblock-1) interface,
 in exactly the same way. Casting the propagator to this interface always succeeds
 (provided that the `TOutput` has the correct type). Invoking the
-`TryReceive`/`TryReceiveAll` methods returns `true` if the underlying dataflow block implements
+[`TryReceive`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.tryreceive)/[`TryReceiveAll`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.ireceivablesourceblock-1.tryreceiveall)
+methods returns `true` if the underlying dataflow block implements
 this interface, and also has at least one available message to emit. Example:
 
 ```C#
@@ -130,12 +131,28 @@ var receivable = (IReceivableSourceBlock<string>)pipeline;
 bool received = receivable.TryReceive(out string item);
 ```
 
+## Adcanced features
+
+Starting from the version 1.2, the pipeline builder supports two additional methods,
+beyond the `LinkTo`.
+
+1. The `AddUnlinked` method makes it possible to add a dataflow block in the pipeline,
+without linking it with the previous block. The completion of the previous block
+will still be propagated automatically to the next block. This can be useful in case a
+block sends messages to the next block manually, by issuing [`Post`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.post)
+or [`SendAsync`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.dataflowblock.sendasync) commands.
+2. The `WithPostCompletionAction` method allows to intercept a synchronous or
+asynchronous action between the completion of a block, and signaling the completion
+of the next block. Any exception thrown by this action will cause the failure of the
+whole pipeline, and the error will be finally surfaced through its
+[`Completion`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.dataflow.idataflowblock.completion).
+
 ## Embedding the library into your project
 
 You can install the [SimpleTplDataflowPipelines](https://www.nuget.org/packages/SimpleTplDataflowPipelines/) NuGet package.
 You can also [download](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/releases) the project and build it locally, or just
 embed the single code file [`PipelineBuilder.cs`](https://github.com/theodorzoulias/SimpleTplDataflowPipelines/blob/main/src/SimpleTplDataflowPipelines/PipelineBuilder.cs)
-(~400 lines of code) into your project.
+(~550 lines of code) into your project.
 This library has been tested on the .NET 5 and the .NET Framework 4.6 platforms.
 
 ## Performance
