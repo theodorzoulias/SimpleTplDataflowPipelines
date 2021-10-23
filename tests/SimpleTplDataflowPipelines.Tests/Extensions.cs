@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,20 +11,33 @@ namespace SimpleTplDataflowPipelines.Tests
     internal static class DataflowBlockExtensions
     {
         // https://stackoverflow.com/questions/49389273/for-a-tpl-dataflow-how-do-i-get-my-hands-on-all-the-output-produced-by-a-transf/62410007#62410007
-        public static async Task<List<T>> ToListAsync<T>(this IReceivableSourceBlock<T> block,
-            CancellationToken cancellationToken = default(CancellationToken))
+        public static Task<List<T>> ToListAsync<T>(this IReceivableSourceBlock<T> block,
+            CancellationToken cancellationToken = default)
         {
-            var list = new List<T>();
-            while (await block.OutputAvailableAsync(cancellationToken).ConfigureAwait(false))
+            return Implementation().ContinueWith(t =>
             {
-                T item;
-                while (block.TryReceive(out item))
+                if (t.IsCanceled) return t;
+                Debug.Assert(block.Completion.IsCompleted);
+                if (block.Completion.IsFaulted)
                 {
-                    list.Add(item);
+                    var tcs = new TaskCompletionSource<List<T>>();
+                    tcs.SetException(block.Completion.Exception.InnerExceptions);
+                    return tcs.Task;
                 }
+                if (block.Completion.IsCanceled) block.Completion.GetAwaiter().GetResult();
+                return t;
+            }, cancellationToken, TaskContinuationOptions.DenyChildAttach |
+                TaskContinuationOptions.LazyCancellation, TaskScheduler.Default).Unwrap();
+
+            async Task<List<T>> Implementation()
+            {
+                var list = new List<T>();
+                while (await block.OutputAvailableAsync(cancellationToken).ConfigureAwait(false))
+                    while (block.TryReceive(out var item))
+                        list.Add(item);
+                await block.Completion.ConfigureAwait(false);
+                return list;
             }
-            await block.Completion.ConfigureAwait(false);
-            return list;
         }
     }
 

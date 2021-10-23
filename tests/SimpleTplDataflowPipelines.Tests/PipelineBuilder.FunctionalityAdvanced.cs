@@ -34,5 +34,27 @@ namespace SimpleTplDataflowPipelines.Tests
             Console.WriteLine(String.Join(", ", timestamps));
             Assert.IsTrue(timestamps.Zip(timestamps.Skip(1)).All(e => e.First <= e.Second));
         }
+
+        [TestMethod]
+        public async Task UnlinkedBlocks()
+        {
+            var block3 = new TransformBlock<int, int>(x => x);
+            var block2 = new ActionBlock<int>(async x => await block3.SendAsync(x));
+            var block1 = new ActionBlock<int>(async x => await block2.SendAsync(x));
+
+            var pipeline = PipelineBuilder
+                .BeginWith(block1)
+                .WithPostCompletionAction(async t => await block2.SendAsync(100))
+                .AddUnlinked(block2)
+                .WithPostCompletionAction(async t => await block3.SendAsync(200))
+                .AddUnlinked(block3)
+                .ToPipeline();
+
+            var source = Enumerable.Range(1, 10);
+            foreach (var item in source) pipeline.Post(item);
+            pipeline.Complete();
+            var list = await ((IReceivableSourceBlock<int>)pipeline).ToListAsync(new CancellationTokenSource(1000).Token);
+            Assert.IsTrue(list.SequenceEqual(source.Append(100).Append(200)));
+        }
     }
 }
