@@ -281,12 +281,13 @@ namespace SimpleTplDataflowPipelines
     }
 
     /// <summary>
-    /// Represents an error that occurred in an other dataflow block, owned by the same pipeline.
+    /// Represents an error that occurred in an other dataflow block,
+    /// or post-completion action, owned by the same pipeline.
     /// </summary>
     public sealed class PipelineException : Exception
     {
         // Prevent this type from being publicly creatable.
-        internal PipelineException() : base("An other dataflow block, owned by the same pipeline, failed.") { }
+        internal PipelineException() : base("An other dataflow block, or post-completion action, owned by the same pipeline, failed.") { }
     }
 
     internal abstract class Node
