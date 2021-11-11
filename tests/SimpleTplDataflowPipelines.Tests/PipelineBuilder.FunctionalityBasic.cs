@@ -290,7 +290,7 @@ namespace SimpleTplDataflowPipelines.Tests
             await Task.Run(async () =>
             {
                 while (true) if (!await pipeline.SendAsync(0)) break;
-            });
+            }).WithTimeout(500);
 
             pipeline.Complete();
 
