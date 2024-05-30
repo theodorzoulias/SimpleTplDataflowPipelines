@@ -131,7 +131,7 @@ var receivable = (IReceivableSourceBlock<string>)pipeline;
 bool received = receivable.TryReceive(out string item);
 ```
 
-## Adcanced features
+## Advanced features
 
 Starting from the version 1.2, the pipeline builder supports two additional methods,
 beyond the `LinkTo`.
